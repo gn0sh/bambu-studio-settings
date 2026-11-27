@@ -1,0 +1,19 @@
+{
+  "plate": {
+    "seam_position": "back",
+    "top_shell_layers": 5,
+    "brim_type": "no_brim",
+    "flush_into_infill": 1
+  },
+  "objects": [
+    {"match": "^showpiece", "set": {"wall_loops": 3, "seam_slope_type": "external"},
+     "why": "show face in listing photos: 3 walls, scarf seam on the outer wall"},
+    {"match": "^(clip|lid|catch)", "set": {"layer_height": 0.2, "wall_loops": 2},
+     "why": "fit tested at 0.20 mm / 2 walls - keep those settings"},
+    {"match": "purge block", "set": {"flush_into_objects": 1},
+     "why": "throw-away part that absorbs color-change purge"}
+  ],
+  "clear": [
+    {"match": "^spare", "keys": ["wall_loops"]}
+  ]
+}

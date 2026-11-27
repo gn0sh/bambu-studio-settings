@@ -1,0 +1,6 @@
+{
+ "_comment": "What each object is for. load: decorative | functional | structural. show: faces seen in use or in photos, bed axes as placed (-y/front, +y/back, -x/left, +x/right, +z/top, -z/bottom). fit: true marks a part with tolerances the analyzer cannot see (slots, snaps).",
+ "^showpiece": {"load": "decorative", "show": "front,top"},
+ "^(drawer|bay)": {"load": "functional", "show": "front", "fit": true},
+ "bracket": {"load": "structural"}
+}

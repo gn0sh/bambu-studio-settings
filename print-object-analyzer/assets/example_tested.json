@@ -1,0 +1,5 @@
+{
+ "_comment": "Fits that were printed and passed. Regex on the object name -> the settings they passed at. These always win over geometry rules. 'walls' = wall_loops, 'top' = top_shell_layers; any Bambu Studio key works.",
+ "^(lid|catch|clip)": {"layer_height": 0.2, "walls": 2, "why": "lid slide and catch tested at 0.20 mm / 2 walls, P1S 0.4, PLA Basic, 2026-11-20"},
+ "hinge pin": {"layer_height": 0.2, "why": "pin fit tested at 0.20 mm"}
+}
