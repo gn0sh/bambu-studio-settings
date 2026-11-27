@@ -1,8 +1,6 @@
 # Telltile™
 
-An Agent Skill for the **gnoshcodes tuning tile**: print one tile, photograph it with your phone, and let your AI
-agent read the photos and tell you which Bambu Studio setting to change - one at a time - then keep a record of
-what each of your filaments needs on each of your printers.
+An Agent Skill for the **gnoshcodes tuning tile**: print one tile, photograph it with your phone, and get told which Bambu Studio setting to change, one at a time. The agent (such as Claude Code) reads your photos, then keeps a record of what each of your filaments needs on each of your printers.
 
 The tile (112 x 84 mm, about 52-59 min with printer start-up and 18 g, no supports, 0.4 nozzle, 0.20 mm layers) carries labelled
 tests for overhangs (30-70 deg), bridges (5-25 mm), stringing, print-in-place fit (0.10-0.40 mm), size (20 mm
@@ -56,7 +54,12 @@ still works: you slice in Bambu Studio and type the recommended values in yourse
 
 ## License
 
-MIT - see `LICENSE`. The license covers the code, model and docs; it grants no rights to the gnoshcodes name or
+MIT, see `LICENSE`. The license covers the code, model and docs; it grants no rights to the gnoshcodes name or
 marks. The name and marks on the tile identify gnoshcodes; please keep them on copies.
 
 A gnoshcodes project.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/brand/gnoshcodes-lockup-dark.svg">
+  <img src="../assets/brand/gnoshcodes-lockup-light.svg" alt="gnoshcodes" width="90">
+</picture>
