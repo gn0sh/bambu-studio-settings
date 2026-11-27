@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version tag to create on main, like v1.0.0"
+        required: true
+        type: string
 
 permissions: {}
 
@@ -20,8 +26,14 @@ jobs:
           fetch-depth: 0
 
       - name: Tag must be on main
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
         run: |
           set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$REF" != "refs/heads/main" ]; then
+            echo "run from main only" >&2; exit 1
+          fi
           git fetch --no-tags origin main
           git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || { echo "tag is not on main" >&2; exit 1; }
 
@@ -38,9 +50,18 @@ jobs:
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAG: ${{ github.ref_name }}
+          EVENT: ${{ github.event_name }}
+          REF_NAME: ${{ github.ref_name }}
+          INPUT_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            TAG="$INPUT_VERSION"
+            [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "version must look like v1.2.3" >&2; exit 1; }
+          else
+            TAG="$REF_NAME"
+          fi
           gh release create "$TAG" ./*.zip SHA256SUMS \
+            --target "$GITHUB_SHA" \
             --title "$TAG" \
             --notes "Skill zips for $TAG: bambu-studio-settings, print-object-analyzer, telltile. Upload a zip as a skill, or copy its folder into your skills folder."
