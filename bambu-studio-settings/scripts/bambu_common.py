@@ -1933,6 +1933,10 @@ def effective(obj, ps, key, default=None):
 BED_TYPES = (("Cool Plate", "cool_plate_temp"), ("Engineering Plate", "eng_plate_temp"),
              ("High Temp Plate", "hot_plate_temp"), ("Textured PEI Plate", "textured_plate_temp"),
              ("Supertack Plate", "supertack_plate_temp"))
+MAX_BED_PLATES = 200             # plates bed_check looks at (Bambu Studio projects have a few dozen at most)
+MAX_BED_SLOTS = 64               # filament slots per plate it looks at (real printers have at most 32)
+MAX_BED_ROWS = 2000              # plate x filament temperature rows in one report; the rest are counted
+MAX_BED_TEMP = 500               # a bed temperature above this (C) is not a temperature: read as missing
 MAX_BED_TYPE_CHARS = 64          # a plate type name longer than this is not compared (the real ones are < 20)
 CLI_DEFAULT_BED = "Cool Plate"   # what the Bambu Studio CLI uses when a project has no curr_bed_type
 BED_NAMES = ", ".join(n for n, _ in BED_TYPES)
@@ -1954,7 +1958,7 @@ def _slot_int(ps, key, slot):
             n = int(f) if math.isfinite(f) and f == int(f) else None
         except (TypeError, ValueError, OverflowError):
             n = None
-    return n
+    return n if n is not None and 0 <= n <= MAX_BED_TEMP else None
 
 
 def _bed_name(v):
@@ -1986,7 +1990,17 @@ def bed_check(ps, plates, presets=None):
     presets = presets or []
     proj_shown, proj_known = _bed_name(ps.get("curr_bed_type"))
     infos, errors, warnings, unset = [], [], [], []
+    plates = list(plates)
+    if len(plates) > MAX_BED_PLATES:
+        warnings.append("more than %d plates: only the first %d were checked for the plate type and bed "
+                        "temperatures" % (MAX_BED_PLATES, MAX_BED_PLATES))
+        plates = plates[:MAX_BED_PLATES]
+    rows = more = 0
     for n, plate_bed, slots in plates:
+        slots = list(slots)
+        if len(slots) > MAX_BED_SLOTS:
+            more += len(slots) - MAX_BED_SLOTS
+            slots = slots[:MAX_BED_SLOTS]
         pl_shown, pl_known = _bed_name(plate_bed)
         if pl_shown == "Default Plate":
             pl_shown = None
@@ -2008,6 +2022,10 @@ def bed_check(ps, plates, presets=None):
             continue
         why = "" if source != "not set" else " (no plate type is set, so the CLI uses %s)" % CLI_DEFAULT_BED
         for sl in slots:
+            if rows >= MAX_BED_ROWS:
+                more += 1
+                continue
+            rows += 1
             first, other = _slot_int(ps, key + "_initial_layer", sl), _slot_int(ps, key, sl)
             name = safe_text(presets[sl - 1], 60) if 0 < sl <= len(presets) and presets[sl - 1] is not None else "?"
             info["temps"].append({"slot": sl, "preset": name, "first_layer": first, "other_layers": other})
@@ -2021,7 +2039,12 @@ def bed_check(ps, plates, presets=None):
             elif missing and source != "not set":
                 errors.append("plate %d: filament %d (%s): no %s in the project settings, so the bed temperature "
                               "on %s is not known" % (n, sl, name, " or ".join(missing), bed))
+    if more:
+        warnings.append("... and %d more plate x filament bed temperature rows, not checked (at most %d per "
+                        "report, %d filaments per plate)" % (more, MAX_BED_ROWS, MAX_BED_SLOTS))
     if unset:
+        if len(unset) > 20:
+            unset = unset[:20] + ["... (%d plates)" % len(unset)]
         warnings.insert(0, "plate type not set (no curr_bed_type, and no bed_type on plate %s): the Bambu Studio "
                            "CLI then uses %s, so the bed temperature may not be the one for the plate on the "
                            "printer; set curr_bed_type to that plate (%s)"

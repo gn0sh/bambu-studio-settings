@@ -351,8 +351,8 @@ def plate_checks(index, ps, st, fpresets, problems, notes):
             slots.setdefault(r["plate"], set()).update(r["filaments"])
         plates = sorted(slots)
     else:
-        plates = sorted(meta) or [1]
-        every = set(range(1, len(st["colours"]) + 1))
+        plates = sorted(meta)[:bc.MAX_BED_PLATES + 1] or [1]   # one over the cap, so bed_check says it cut
+        every = set(range(1, min(len(st["colours"]), bc.MAX_BED_SLOTS) + 1))
         slots = dict((n, every) for n in plates)
     infos, errors, warnings = bc.bed_check(ps, [(n, meta.get(n, {}).get("bed_type"), sorted(slots[n]))
                                                 for n in plates], fpresets)

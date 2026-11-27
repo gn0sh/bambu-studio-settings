@@ -302,6 +302,38 @@ class BuildPlateTest(fx.TempDirTest):
                          [(1, 35), (2, 0), (3, 35)])
         self.assertFalse(any("filament 3" in p for p in d["problems"]), d["problems"])
 
+    def test_many_plates_and_slots_stay_bounded(self):
+        """plate-bounds/cross-product-output: 2000 plates x 2000 slots (layout check failing, so every plate
+        gets every slot) gives a small report, quickly."""
+        import time
+        meta = dict((n, {"bed_type": "Cool Plate"}) for n in range(1, 2001))
+        ps = fx.project_settings(filament_colour=["#FFFFFF"] * 2000, printable_area=["bad"],
+                                 cool_plate_temp=["0"], cool_plate_temp_initial_layer=["0"])
+        for args in ((), ("--json",)):
+            t0 = time.time()
+            r = self.verify(ps, *args, plate_meta=meta)
+            self.assertLess(time.time() - t0, 30)
+            self.assertLess(len(r.stdout), 600000, len(r.stdout))
+            self.assertEqual(r.returncode, 1)
+            self.assertIn("more plate x filament bed temperature rows, not checked", r.stdout)
+            self.assertIn("more than 200 plates: only the first 200 were checked", r.stdout)
+            self.assertClean(r)
+        d = json.loads(r.stdout)
+        self.assertLessEqual(sum(len(b["temps"]) for b in d["build_plates"]), 2000)
+        self.assertLessEqual(len(d["build_plates"]), 200)
+
+    def test_absurd_temperatures_are_missing(self):
+        for v in ("1e308", "501", "-1", "99999999999999999", "1e3"):
+            with self.subTest(v):
+                r = self.verify(fx.project_settings(cool_plate_temp=[v], cool_plate_temp_initial_layer=[v]), "--json")
+                d = json.loads(r.stdout)
+                self.assertEqual(d["build_plates"][0]["temps"][0]["first_layer"], None)
+                self.assertTrue(any("no cool_plate_temp_initial_layer or cool_plate_temp" in p for p in d["problems"]))
+        d = json.loads(self.verify(fx.project_settings(cool_plate_temp=["500"], cool_plate_temp_initial_layer=["0.0"]),
+                                   "--json").stdout)
+        self.assertEqual(d["build_plates"][0]["temps"][0]["other_layers"], 500)
+        self.assertEqual(d["build_plates"][0]["temps"][0]["first_layer"], 0)
+
     def test_odd_values_do_not_crash(self):
         for v in (["x"], [None], [], "50", [["1"]], ["9" * 400], [True]):
             r = self.verify(fx.project_settings(curr_bed_type=["Cool Plate"], cool_plate_temp=v,
