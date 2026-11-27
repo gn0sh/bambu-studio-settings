@@ -1,0 +1,46 @@
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions: {}
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Tag must be on main
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin main
+          git merge-base --is-ancestor "$GITHUB_SHA" FETCH_HEAD || { echo "tag is not on main" >&2; exit 1; }
+
+      - name: Build one zip per skill
+        run: |
+          set -euo pipefail
+          for skill in bambu-studio-settings print-object-analyzer telltile; do
+            test -d "$skill" || { echo "missing skill folder: $skill" >&2; exit 1; }
+            git archive --format=zip -o "$skill.zip" HEAD "$skill"
+          done
+          sha256sum ./*.zip > SHA256SUMS
+          ls -l ./*.zip SHA256SUMS
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          gh release create "$TAG" ./*.zip SHA256SUMS \
+            --title "$TAG" \
+            --notes "Skill zips for $TAG: bambu-studio-settings, print-object-analyzer, telltile. Upload a zip as a skill, or copy its folder into your skills folder."

@@ -9,7 +9,7 @@ Three free Agent Skills that set up Bambu Studio print settings and check them b
 | [`telltile`](telltile/) | Telltile™: print one small test tile per filament, photograph it, and get suggested settings for that filament on your printer, kept in your own filament list. Checks the tile file and sliced G-code before you print. |
 
 Each folder has its own README with install steps, safety notes and limits. To install one, copy its folder
-into your agent's skills folder (for Claude Code: `~/.claude/skills/`), or upload its zip from the Releases page
+into your agent's skills folder (for Claude Code: `~/.claude/skills/`), or upload its zip from the [Releases page](https://github.com/gn0sh/bambu-studio-settings/releases/latest)
 as a skill.
 
 ## License
