@@ -54,11 +54,11 @@ DIMENSIONAL = {"layer_height", "wall_loops", "wall_generator", "detect_thin_wall
                "initial_layer_print_height", "precise_z_height"}
 TESTED_KEEP = DIMENSIONAL | {"brim_type", "brim_width", "brim_object_gap"}  # a tested fit depends on these too
 SETTING_KEY = re.compile(r"^[A-Za-z0-9_]+\Z")  # \Z, not $: "key\n" is not a key
-SPEC_SECTIONS = ("plate", "objects")
+SPEC_SECTIONS = ("plate", "objects")  # what tune_project.py reads (it refuses anything else)
 # Build plates: --plate word -> the curr_bed_type name Bambu Studio uses. Only Textured PEI is a textured surface.
 PLATES = (("cool", "Cool Plate"), ("engineering", "Engineering Plate"), ("high-temp", "High Temp Plate"),
           ("textured-pei", "Textured PEI Plate"), ("supertack", "Supertack Plate"))
-TEXTURED_PLATES = ("Textured PEI Plate",)  # what tune_project.py reads (it refuses anything else)
+TEXTURED_PLATES = ("Textured PEI Plate",)
 
 
 def first(v, default=None):
