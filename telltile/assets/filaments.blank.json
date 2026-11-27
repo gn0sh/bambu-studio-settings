@@ -1,0 +1,21 @@
+{
+ "schema": "gnoshcodes filament registry v1",
+ "updated": "",
+ "notes": [
+  "One entry per physical filament (brand + line + color). Codes are MATERIAL-COLOR-NN and never reused.",
+  "presets: the Bambu Studio SYSTEM filament preset each printer starts from - copy exact names from the bambu-studio-settings skill's list_presets.py.",
+  "tuned.<printer>.filament: settings that belong to the filament (temperatures, flow ratio, pressure advance, retraction, fan). Put them in a filament user preset (make_preset.py --type filament) or in a project's filament settings (tune_project.py plate spec). Never in a process preset.",
+  "tuned.<printer>.process: settings that live in the process but were tuned for this filament (x-y hole/contour compensation, elephant foot compensation, seam, top layers, ironing, overhang/bridge speeds). Put them in the project (tune_project.py plate spec) or a process user preset named after the filament.",
+  "Every override value carries 'tests': the ids of the tile prints in 'tests' that justify it.",
+  "status: untested (nothing printed), baseline (tile printed at system preset, verdict recorded), tuned (at least one override confirmed by a reprint)."
+ ],
+ "printers": {
+  "EXAMPLE": {
+   "machine_preset": "Bambu Lab P1S 0.4 nozzle",
+   "process_preset": "0.20mm Standard @BBL X1C",
+   "plate": "Textured PEI Plate",
+   "nozzle": "0.4"
+  }
+ },
+ "filaments": []
+}
