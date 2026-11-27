@@ -131,9 +131,10 @@ python scripts/verify_project.py job_tuned.3mf [--area 25,0,325,320] [--expect-s
 
 It checks filament slots and colors, that every object sits inside the bed (or the `--area` you give, e.g. the
 area both H2D nozzles reach), heights, overlaps, prime tower placement, the per-object settings Bambu Studio will
-use, the prime-tower layer-height rule, the build plate (`curr_bed_type`) and the bed temperature it gives each
-filament (0 or missing for that plate is a PROBLEM), post-processing scripts and custom G-code. Exit code 1 means a problem
-to fix or explain.
+use, the prime-tower layer-height rule, each plate's plate type (its own `bed_type`, else `curr_bed_type`) and
+the bed temperature it gives each filament, post-processing scripts and custom G-code. A bed temperature of 0 on
+that plate type is a PROBLEM, and so is a missing one when the plate type is set; a plate type that is not set
+or not known is a note. Exit code 1 means a problem to fix or explain.
 
 Then, for single-filament projects, slice with the CLI and read the G-code:
 

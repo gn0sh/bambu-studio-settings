@@ -102,10 +102,14 @@ plate actually on the printer; ask the user which one when you do not know, and 
 - **0 means "not for this plate".** A filament with 0 for a plate (PETG on Cool Plate, for example) is not meant
   for it: the CLI refuses to slice it ("Filaments are not compatible with the plate type"). Without
   `curr_bed_type` the CLI uses Cool Plate, so set it for every CLI slice.
-- `verify_project.py` prints the plate and the bed temperature (first layer, other layers) it gives each used
-  filament, and reports a 0 or missing temperature for that plate, or a plate name it does not know, as a PROBLEM.
-  `tune_project.py` warns about the same, and when `curr_bed_type` is not set
-  (`--set "curr_bed_type=Engineering Plate"`, with the name of the plate on the printer).
+- **Each plate can have its own plate type.** A plate in `Metadata/model_settings.config` may carry
+  `<metadata key="bed_type" value="Cool Plate"/>`; Bambu Studio then uses it for that plate instead of
+  `curr_bed_type`. Check both when a project has several plates.
+- `verify_project.py` prints, per plate, the plate type and the bed temperature (first layer, other layers) it
+  gives each filament printed there. A temperature of 0 on that plate type is a PROBLEM, and so is a missing
+  temperature when the plate type is set. A plate type that is not set, or not one of the five names above, is
+  a note: its temperatures are not checked. `tune_project.py` prints the same findings as warnings and still
+  writes. To set the plate type: `tune_project.py in.3mf out.3mf --set "curr_bed_type=<plate on the printer>"`.
 - **First layer reads differently.** On the Textured PEI Plate, Bambu's start G-code lowers Z by 0.02 mm (0.01 mm
   with a 0.2 mm nozzle) so the first layer fills the texture. Squish and elephant foot measured on a textured
   plate do not carry over to a smooth one, and the other way round; note the plate with every first-layer result.
