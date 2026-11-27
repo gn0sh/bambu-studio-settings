@@ -20,6 +20,7 @@ PEI Plate or Supertack Plate; no default). Results belong to printer + plate + f
 it was printed on (default the printer's), a tile printed on another plate may not change that printer's tuned
 values, and `spec` sets curr_bed_type to the printer's plate.
   registry.py validate                                          # schema, codes, printers, tests, preset names
+  registry.py set-plate P1S "Cool Plate"                        # the build plate on a printer (fixes old names)
   registry.py tile PLA-NAVY-01 --printer P1S [--layer 0.20] [--out tile.stl]   # the openscad command, quoted
 
 Where the settings go (see the reading guide):
@@ -546,17 +547,46 @@ def refuse(problems, what):
     sys.exit("refused: %s" % what)
 
 
-def load():
-    """The registry at REG, parsed and passed against SCHEMA, or exit. Nothing else reads the file."""
+def read_registry():
+    """The registry at REG, parsed (not yet checked), or exit. Only load() and cmd_set_plate() call this."""
     if not os.path.exists(REG):
         sys.exit("no registry at %s (registry.py init, or --registry PATH)" % REG)
     try:
-        reg = parse_registry(read_capped(REG).decode("utf-8"))
+        return parse_registry(read_capped(REG).decode("utf-8"))
     except (ValueError, RecursionError) as e:
         sys.exit("%s is not a registry (bad JSON: %s)" % (REG, safe_text(str(e), 120)))
+
+
+def legacy_plates(reg, problems):
+    """Printers whose plate check() refused but which is an old free-form plate name: before v1.1 any preset-safe
+    name was accepted. Only these may be fixed by set-plate; nothing else about the registry is loosened."""
+    printers = reg.get("printers") if isinstance(reg, dict) else None
+    if not isinstance(printers, dict):
+        return []
+    out = []
+    for name, p in printers.items():
+        v = p.get("plate") if isinstance(p, dict) else None
+        if (isinstance(name, str) and PRINTER_RE.fullmatch(name) and isinstance(v, str) and len(v) <= 100
+                and SAFE_RE.fullmatch(v) and v not in PLATE_NAMES
+                and any(x.startswith("printers.%s.plate: " % name) for x in problems)):
+            out.append(name)
+    return out
+
+
+def set_plate_command(names):
+    return "registry.py set-plate %s" % " ".join('%s "<plate on the printer>"' % n for n in names)
+
+
+def load():
+    """The registry at REG, parsed and passed against SCHEMA, or exit. Nothing else reads the file (set-plate
+    reads it through read_registry to fix an old plate name, then writes only through commit)."""
+    reg = read_registry()
     bad = check(reg)
     if bad:
-        refuse(bad, "%s is not a usable registry; nothing in it was used" % REG)
+        legacy = legacy_plates(reg, bad)
+        refuse(bad, "%s is not a usable registry; nothing in it was used%s" % (REG, (
+            "\n  the plate of printer %s is an old free-form name; fix it with: %s   (%s)"
+            % (", ".join(legacy), set_plate_command(legacy), plate_hint())) if legacy else ""))
     return reg
 
 
@@ -673,6 +703,40 @@ def cmd_init(a):
         old = os.path.abspath(REG) + ".before-init-%s.bak" % datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
         write_atomic(old, data, mode); print("kept the old registry as %s" % old)
     commit(reg); print("created %s with printers %s" % (REG, ", ".join(printers) or "(none)"))
+
+
+def cmd_set_plate(a):
+    """Set the build plate of one or more printers. Also opens a registry whose only problems are old free-form
+    plate names on exactly these printers (before v1.1 any preset-safe name was accepted); the result is written
+    by commit(), so it must pass the whole schema, the size cap, the .bak and the atomic replace."""
+    if not a.pairs or len(a.pairs) % 2:
+        sys.exit('usage: registry.py set-plate PRINTER "PLATE" [PRINTER "PLATE" ...]  (%s)' % plate_hint())
+    targets = {}
+    for name, plate in zip(a.pairs[::2], a.pairs[1::2]):
+        if not PRINTER_RE.fullmatch(name):
+            sys.exit("refused: %s is not a printer name (1-32 letters, digits, . _ -, starting with a letter or "
+                     "digit)" % repr(safe_text(name, 40)))
+        if plate not in PLATE_NAMES:
+            sys.exit("refused: %s is not a build plate: %s" % (repr(safe_text(plate, 40)), plate_hint()))
+        targets[name] = plate
+    reg = read_registry()
+    bad = check(reg)
+    legacy = legacy_plates(reg, bad)
+    rest = [x for x in bad if not any(x.startswith("printers.%s.plate: " % n) for n in legacy if n in targets)]
+    if rest:
+        left = [n for n in legacy if n not in targets]
+        refuse(rest, "%s is not a usable registry; set-plate only fixes old plate names; nothing written%s" % (REG, (
+            "\n  printer %s also has an old plate name: %s" % (", ".join(left), set_plate_command(sorted(
+                set(left) | set(targets))))) if left else ""))
+    for name in targets:
+        printer_of(reg, name)
+    old = dict((n, reg["printers"][n]["plate"]) for n in targets)
+    for name, plate in targets.items():
+        reg["printers"][name]["plate"] = plate
+    commit(reg)
+    for name, plate in targets.items():
+        print("printer %s: plate %s -> %s" % (name, safe_text(old[name], 100), plate))
+    print("tuned values belong to the plate they were printed on: run registry.py validate")
 
 
 def cmd_add(a):
@@ -961,6 +1025,8 @@ def main():
     s.add_argument("--status", choices=("untested", "baseline", "tuned")); s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=cmd_record)
     sub.add_parser("validate").set_defaults(fn=cmd_validate)
+    s = sub.add_parser("set-plate", help="set a printer's build plate (also fixes an old free-form plate name)")
+    s.add_argument("pairs", nargs="*", metavar="PRINTER PLATE"); s.set_defaults(fn=cmd_set_plate)
     s = sub.add_parser("tile", help="print the openscad command for a tile with this ID (quoted; run it as is)")
     s.add_argument("code", nargs="?"); s.add_argument("--printer"); s.add_argument("--layer")
     s.add_argument("--out", default="tile.stl"); s.set_defaults(fn=cmd_tile)

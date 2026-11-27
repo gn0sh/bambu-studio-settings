@@ -244,5 +244,103 @@ class BuildPlate(fx.TempDir):
         self.assertIn("printed on Cool Plate, but P1S's plate is Textured PEI Plate", out)
 
 
+class LegacyPlate(fx.TempDir):
+    """registry-trust/legacy-plate: a registry from before v1.1 whose printer plate is another preset-safe name is
+    refused by every command with the set-plate command that fixes it; set-plate fixes only that."""
+
+    HINT = 'registry.py set-plate P1S "<plate on the printer>"'
+
+    def reg(self, *args):
+        return fx.run("registry.py", "--registry", self.path("filaments.json"), *args)
+
+    def legacy(self, plate="Textured PEI", **printers):
+        reg = fx.registry(filament={"nozzle_temperature": fx.setting("215")})
+        reg["printers"]["P1S"]["plate"] = plate
+        for name, pl in printers.items():
+            reg["printers"][name] = dict(reg["printers"]["P1S"], plate=pl)
+        return self.write_registry(reg)
+
+    def test_every_command_names_set_plate(self):
+        p = self.legacy()
+        before = self.read_bytes(p)
+        with open(self.path("rec.json"), "w") as fh:
+            json.dump({"code": "PLA-NAVY-01", "printer": "P1S", "verdict": "x"}, fh)
+        for args in (["list"], ["show", "PLA-NAVY-01"], ["spec", "PLA-NAVY-01", "--printer", "P1S"], ["validate"],
+                     ["record", "--from", self.path("rec.json")],
+                     ["add", "PLA-RED-01", "--material", "PLA", "--color", "Red", "--hex", "#FF0000"]):
+            with self.subTest(args[0]):
+                rc, out, err = self.reg(*args)
+                self.assertNotEqual(rc, 0)
+                self.assertIn("printers.P1S.plate: 'Textured PEI' is not one of", err)
+                self.assertIn(self.HINT, err)
+                self.assertNotIn("Traceback", err)
+                self.assertEqual(self.read_bytes(p), before)
+
+    def test_set_plate_fixes_it(self):
+        p = self.legacy()
+        before = self.read_bytes(p)
+        rc, out, err = self.reg("set-plate", "P1S", "Cool Plate")
+        self.assertEqual(rc, 0, err)
+        self.assertIn("printer P1S: plate Textured PEI -> Cool Plate", out)
+        self.assertEqual(self.read_bytes(p + ".bak"), before)
+        with open(p, encoding="utf-8") as fh:
+            self.assertEqual(json.load(fh)["printers"]["P1S"]["plate"], "Cool Plate")
+        rc, out, err = self.reg("validate")
+        self.assertEqual(rc, 0, out + err)
+
+    def test_set_plate_refuses_bad_input(self):
+        p = self.legacy()
+        before = self.read_bytes(p)
+        for args in ([], ["P1S"], ["P1S", "Textured PEI"], ["P1S", "cool plate"], ["P1S", "Cool Plate;rm"],
+                     ["P1S;x", "Cool Plate"], ["X1C", "Cool Plate"], ["P1S", "Cool Plate", "X1C"]):
+            with self.subTest(args):
+                rc, out, err = self.reg("set-plate", *args)
+                self.assertNotEqual(rc, 0)
+                self.assertNotIn("Traceback", err)
+                self.assertEqual(self.read_bytes(p), before)
+                self.assertFalse(os.path.exists(p + ".bak"))
+
+    def test_set_plate_does_not_loosen_anything_else(self):
+        reg = fx.registry()
+        reg["printers"]["P1S"]["plate"] = "Textured PEI"
+        reg["filaments"][0]["color"]["hex"] = "navy"
+        p = self.write_registry(reg)
+        before = self.read_bytes(p)
+        rc, out, err = self.reg("set-plate", "P1S", "Cool Plate")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("filaments[0].color.hex", err)
+        self.assertEqual(self.read_bytes(p), before)
+        for plate in ("x;rm -rf ~", "-Cool", 5, ["Cool Plate"]):          # never valid, not an old name either
+            with self.subTest(plate):
+                p = self.legacy(plate)
+                before = self.read_bytes(p)
+                rc, out, err = self.reg("list")
+                self.assertNotIn("set-plate", err)
+                rc, out, err = self.reg("set-plate", "P1S", "Cool Plate")
+                self.assertNotEqual(rc, 0)
+                self.assertEqual(self.read_bytes(p), before)
+
+    def test_two_old_plates(self):
+        p = self.legacy(X1C="PEI")
+        before = self.read_bytes(p)
+        rc, out, err = self.reg("list")
+        self.assertIn('registry.py set-plate P1S "<plate on the printer>" X1C "<plate on the printer>"', err)
+        rc, out, err = self.reg("set-plate", "P1S", "Cool Plate")
+        self.assertNotEqual(rc, 0)
+        self.assertIn("printer X1C also has an old plate name", err)
+        self.assertEqual(self.read_bytes(p), before)
+        rc, out, err = self.reg("set-plate", "P1S", "Cool Plate", "X1C", "Textured PEI Plate")
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.reg("list")
+        self.assertEqual(rc, 0, err)
+
+    def test_set_plate_on_a_valid_registry(self):
+        self.write_registry(fx.registry())
+        rc, out, err = self.reg("set-plate", "P1S", "Engineering Plate")
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S")
+        self.assertEqual(json.loads(out)["plate"]["curr_bed_type"], "Engineering Plate")
+
+
 if __name__ == "__main__":
     unittest.main()

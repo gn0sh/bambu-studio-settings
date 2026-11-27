@@ -54,7 +54,9 @@ and filament code on the ID panel, `assets/renders/` (what a perfect tile looks 
    and changes how the first layer reads. Ask the maker which plate is on the printer (Cool Plate, Engineering
    Plate, High Temp Plate, Textured PEI Plate or Supertack Plate) and pass it to `init`, which has no default.
    Never assume Textured PEI. A tile printed on another plate is recorded with its `plate` and does not change
-   that printer's tuned values (add a printer entry for that plate instead).
+   that printer's tuned values (add a printer entry for that plate instead). An older registry whose plate is
+   not one of those names is refused with the fix to run: `registry.py set-plate PRINTER "<plate>"`, with the
+   plate the maker names.
 
 ## Workflow
 

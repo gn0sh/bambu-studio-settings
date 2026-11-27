@@ -40,8 +40,12 @@ One file per maker, kept with their projects (never inside this skill). Start fr
   printed on another plate. `spec` sets `curr_bed_type` to the printer's plate.
 - **Schema version.** The schema id stays `gnoshcodes filament registry v1` (skill v1.1.0): a test's `plate` is
   optional, so registries whose tests have none are still valid. A printer's `plate` must now be one of the five
-  names above; a registry with another plate name (or a misspelt one) is refused, and the message lists the
-  names - fix it by hand to the plate on the printer.
+  names above. A registry from before v1.1 with another plate name is refused by every command, and the message
+  names the fix: `registry.py set-plate P1S "Cool Plate"` (the plate really on the printer; several
+  `PRINTER PLATE` pairs at once if more printers need it). `set-plate` fixes only that: any other problem still
+  refuses the file, and the result is written like every other change (whole schema checked, size cap, `.bak`,
+  atomic replace). It also changes a printer's plate later; then run `validate`, which flags tuned values from
+  tests on the old plate.
 - **filament** block = settings that live in a filament preset: `nozzle_temperature`,
   `nozzle_temperature_initial_layer`, plate temperatures (`cool_plate_temp`,
   `cool_plate_temp_initial_layer`, `eng_plate_temp`, `eng_plate_temp_initial_layer`, `hot_plate_temp`,
