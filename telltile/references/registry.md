@@ -21,7 +21,8 @@ One file per maker, kept with their projects (never inside this skill). Start fr
        "status": "untested | baseline | tuned",
        "filament": {"filament_retraction_length": {"value": "1.0", "tests": ["T-20261127-P1S-02"], "why": "..."}},
        "process":  {"xy_hole_compensation": {"value": "0.05", "tests": ["T-20261127-P1S-02"], "why": "..."}}}},
-   "tests": [{"id": "T-20261127-P1S-02", "date": "2026-11-27", "printer": "P1S", "tile": "tuning tile v1",
+   "tests": [{"id": "T-20261127-P1S-02", "date": "2026-11-27", "printer": "P1S", "plate": "Textured PEI Plate",
+              "tile": "tuning tile v1",
               "settings": "0.20mm Standard @BBL X1C + Bambu PLA Basic @BBL P1S 0.4 nozzle + overrides",
               "changed": {"filament": {...}, "process": {...}}, "photos": "4 photos",
               "features": {"fit": "0.20", "stringing": "good", "overhang": "55", "bridge": "20"},
@@ -30,6 +31,17 @@ One file per maker, kept with their projects (never inside this skill). Start fr
 }
 ```
 
+- **plate** = the build plate, as Bambu Studio names it in `curr_bed_type`: one of `Cool Plate`, `Engineering
+  Plate`, `High Temp Plate`, `Textured PEI Plate`, `Supertack Plate` (nothing else is accepted). Results belong
+  to printer + plate + filament. Each printer has the plate on it: `init` must be given it (no default; never
+  assume Textured PEI). A test may carry the plate it was printed on; `record` writes the printer's plate unless
+  told another one, and a tile printed on another plate may not set that printer's tuned values, status or why
+  (add a printer entry for that plate, e.g. `P1S-COOL`). `validate` flags a tuned value that cites a test
+  printed on another plate. `spec` sets `curr_bed_type` to the printer's plate.
+- **Schema version.** The schema id stays `gnoshcodes filament registry v1` (skill v1.1.0): a test's `plate` is
+  optional, so registries whose tests have none are still valid. A printer's `plate` must now be one of the five
+  names above; a registry with another plate name (or a misspelt one) is refused, and the message lists the
+  names - fix it by hand to the plate on the printer.
 - **filament** block = settings that live in a filament preset: `nozzle_temperature`,
   `nozzle_temperature_initial_layer`, plate temperatures (`cool_plate_temp`,
   `cool_plate_temp_initial_layer`, `eng_plate_temp`, `eng_plate_temp_initial_layer`, `hot_plate_temp`,
@@ -53,7 +65,7 @@ One file per maker, kept with their projects (never inside this skill). Start fr
   it reads, prints or writes anything, and every write is checked again: every key, type, text length, list size,
   name pattern, range and choice. One problem anywhere refuses the whole file. Texts (verdicts, notes, brand)
   are at most 64-500 characters with no control characters; printer names are 1-32 letters, digits, `. _ -`;
-  preset and plate names are 1-100 letters, digits, spaces and `. _ @ ( ) + / -`, starting with a letter or digit
+  preset names are 1-100 letters, digits, spaces and `. _ @ ( ) + / -`, starting with a letter or digit
   (nothing a shell treats specially inside quotes); a file is at most 2 MB. Characters are judged by the running
   Python's Unicode tables, so a character newer than them (a recent emoji on Python 3.8) counts as unassigned and
   is refused: a note written on a newer Python can be refused on an older one (it fails safe).
@@ -131,7 +143,7 @@ One file per maker, kept with their projects (never inside this skill). Start fr
 ## Using it in project files
 
 ```
-registry.py spec PLA-NAVY-01 --printer P1S > spec.json         # {"plate": {...overrides, "filament_color"}}
+registry.py spec PLA-NAVY-01 --printer P1S > spec.json         # {"plate": {...overrides, "filament_color", "curr_bed_type"}}
 tune_project.py job.3mf job_PLA-NAVY-01.3mf --spec spec.json    # bambu-studio-settings skill
 registry.py spec PLA-NAVY-01 --printer P1S --for preset > fil.json
 make_preset.py --user-dir ... --type filament --base "<presets.P1S>" --name "PLA-NAVY-01 P1S" --overrides fil.json

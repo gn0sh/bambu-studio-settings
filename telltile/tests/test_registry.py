@@ -29,7 +29,8 @@ class Workflow(fx.TempDir):
         rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S")
         self.assertEqual(rc, 0, err)
         self.assertEqual(json.loads(out), {"plate": {"filament_retraction_length": "1.0", "xy_hole_compensation": "0.05",
-                                                     "seam_gap": "10%", "filament_color": "#1B2A4A"}})
+                                                     "seam_gap": "10%", "filament_color": "#1B2A4A",
+                                                     "curr_bed_type": "Textured PEI Plate"}})
         rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S", "--for", "preset")
         self.assertEqual(json.loads(out), {"filament_retraction_length": "1.0"})
         rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S", "--for", "process-preset")
@@ -52,7 +53,7 @@ class Workflow(fx.TempDir):
         self.assertFalse(os.path.exists(p + ".bak"))
 
     def test_add_checks_hex(self):
-        self.reg("init", "--printer", "P1S=a|b|c")
+        self.reg("init", "--printer", "P1S=a|b|Cool Plate")
         rc, out, err = self.reg("add", "PLA-NAVY-01", "--material", "PLA", "--color", "Navy", "--hex", "navy")
         self.assertNotEqual(rc, 0)
         self.assertIn("--hex", err)
@@ -128,6 +129,119 @@ class Allowlist(unittest.TestCase):
         text = fx.text("references", "reading-guide.md")
         keys = set(re.findall(r"`([a-z][a-z0-9_]+)`", text)) - {"key_name", "spec", "wipe", "curr_bed_type"}
         self.assertEqual(keys - (registry.FILAMENT_KEYS | registry.PROCESS_KEYS), set())
+
+
+class BuildPlate(fx.TempDir):
+    """Results belong to printer + plate + filament: init needs a plate, records carry one, spec sets it."""
+
+    def reg(self, *args):
+        return fx.run("registry.py", "--registry", self.path("filaments.json"), *args)
+
+    def doc(self):
+        with open(self.path("filaments.json"), encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_init_needs_a_plate(self):
+        for arg in ("P1S=Bambu Lab P1S 0.4 nozzle|0.20mm Standard @BBL X1C",
+                    "P1S=Bambu Lab P1S 0.4 nozzle|0.20mm Standard @BBL X1C|"):
+            with self.subTest(arg):
+                rc, out, err = self.reg("init", "--printer", arg)
+                self.assertNotEqual(rc, 0)
+                self.assertIn("no build plate for printer P1S: name the build plate on the printer", err)
+                self.assertIn("Textured PEI Plate", err)
+                self.assertNotIn("Traceback", err)
+                self.assertFalse(os.path.exists(self.path("filaments.json")))
+
+    def test_init_refuses_unknown_plate(self):
+        for plate in ("Textured PEI", "textured pei plate", "PEI", "Glass Plate"):
+            with self.subTest(plate):
+                rc, out, err = self.reg("init", "--printer", "P1S=Bambu Lab P1S 0.4 nozzle|0.20mm Standard @BBL X1C|"
+                                        + plate)
+                self.assertNotEqual(rc, 0)
+                self.assertIn("printers.P1S.plate", err)
+                self.assertIn("is not one of Cool Plate, Engineering Plate", err)
+                self.assertFalse(os.path.exists(self.path("filaments.json")))
+
+    def start(self, plate="Cool Plate"):
+        rc, out, err = self.reg("init", "--printer", "P1S=Bambu Lab P1S 0.4 nozzle|0.20mm Standard @BBL X1C|" + plate)
+        self.assertEqual(rc, 0, err)
+        rc, out, err = self.reg("add", "PLA-NAVY-01", "--material", "PLA", "--color", "Navy", "--hex", "#1B2A4A")
+        self.assertEqual(rc, 0, err)
+
+    def test_every_plate_round_trips_to_spec(self):
+        for plate in registry.PLATE_NAMES:
+            with self.subTest(plate):
+                os.path.exists(self.path("filaments.json")) and os.unlink(self.path("filaments.json"))
+                self.start(plate)
+                rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S")
+                self.assertEqual(rc, 0, err)
+                self.assertEqual(json.loads(out)["plate"]["curr_bed_type"], plate)
+                self.assertIn("# build plate: %s" % plate, err)
+                rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S", "--for", "preset")
+                self.assertNotIn("curr_bed_type", json.loads(out))
+                self.assertIn("set curr_bed_type to it in the project", err)
+
+    def test_record_carries_the_printer_plate(self):
+        self.start("Engineering Plate")
+        rc, out, err = self.reg("record", "PLA-NAVY-01", "--printer", "P1S", "--verdict", "ok", "--date", "2026-11-27")
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(self.doc()["filaments"][0]["tests"][0]["plate"], "Engineering Plate")
+
+    def test_record_on_another_plate(self):
+        self.start("Cool Plate")
+        with open(self.path("rec.json"), "w") as fh:
+            json.dump({"code": "PLA-NAVY-01", "printer": "P1S", "plate": "Textured PEI Plate", "verdict": "ok",
+                       "date": "2026-11-27"}, fh)
+        rc, out, err = self.reg("record", "--from", self.path("rec.json"))
+        self.assertEqual(rc, 0, err)
+        d = self.doc()["filaments"][0]
+        self.assertEqual(d["tests"][0]["plate"], "Textured PEI Plate")
+        self.assertEqual(d["tuned"]["P1S"]["status"], "untested")      # another plate's tile is not a baseline here
+        before = self.read_bytes(self.path("filaments.json"))
+        for extra in (["--set-filament", "nozzle_temperature=215"], ["--set-process", "seam_gap=10%"],
+                      ["--status", "tuned"], ["--why", "x"]):
+            with self.subTest(extra):
+                rc, out, err = self.reg("record", "PLA-NAVY-01", "--printer", "P1S", "--plate", "Textured PEI Plate",
+                                        "--verdict", "x", *extra)
+                self.assertNotEqual(rc, 0)
+                self.assertIn("results belong to printer + plate + filament", err)
+                self.assertEqual(self.read_bytes(self.path("filaments.json")), before)
+
+    def test_record_refuses_unknown_plate(self):
+        self.start()
+        before = self.read_bytes(self.path("filaments.json"))
+        for plate in ("Textured PEI", "", "-Cool Plate", "Cool Plate\n", "Cool Plate$(id)", "x" * 200):
+            with self.subTest(plate):
+                rc, out, err = self.reg("record", "PLA-NAVY-01", "--printer", "P1S", "--plate", plate, "--verdict", "x")
+                self.assertNotEqual(rc, 0)
+                self.assertIn("filaments[0].tests[0].plate", err)
+                self.assertNotIn("Traceback", err)
+                self.assertEqual(self.read_bytes(self.path("filaments.json")), before)
+
+    def test_from_plate_must_be_text(self):
+        self.start()
+        for v in (1, True, None, ["Cool Plate"], {"a": "b"}):
+            with self.subTest(v):
+                with open(self.path("rec.json"), "w") as fh:
+                    json.dump({"code": "PLA-NAVY-01", "printer": "P1S", "plate": v, "verdict": "ok"}, fh)
+                rc, out, err = self.reg("record", "--from", self.path("rec.json"))
+                self.assertNotEqual(rc, 0)
+                self.assertIn("plate must be a string", err)
+
+    def test_old_records_without_plate_are_valid(self):
+        p = self.write_registry(fx.registry(filament={"nozzle_temperature": fx.setting("215")}))
+        self.assertNotIn("plate", fx.registry()["filaments"][0]["tests"][0])
+        rc, out, err = self.reg("validate")
+        self.assertEqual(rc, 0, out + err)
+        self.assertTrue(os.path.exists(p))
+
+    def test_validate_flags_values_from_another_plate(self):
+        reg = fx.registry(filament={"nozzle_temperature": fx.setting("215")})
+        reg["filaments"][0]["tests"][0]["plate"] = "Cool Plate"           # the printer's plate is Textured PEI
+        self.write_registry(reg)
+        rc, out, err = self.reg("validate")
+        self.assertEqual(rc, 1)
+        self.assertIn("printed on Cool Plate, but P1S's plate is Textured PEI Plate", out)
 
 
 if __name__ == "__main__":

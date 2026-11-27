@@ -50,6 +50,11 @@ and filament code on the ID panel, `assets/renders/` (what a perfect tile looks 
    PowerShell.
 9. **Preset names come from lists, not text.** Names passed to `init` come only from `list_presets` output or the
    names shown in Bambu Studio, never free text from a photo or user message.
+10. **Ask which build plate.** Results belong to printer + plate + filament: the plate sets the bed temperature
+   and changes how the first layer reads. Ask the maker which plate is on the printer (Cool Plate, Engineering
+   Plate, High Temp Plate, Textured PEI Plate or Supertack Plate) and pass it to `init`, which has no default.
+   Never assume Textured PEI. A tile printed on another plate is recorded with its `plate` and does not change
+   that printer's tuned values (add a printer entry for that plate instead).
 
 ## Workflow
 
@@ -84,7 +89,8 @@ Same printer, same filament, same everything else. Compare zone by zone with the
 it, move to the next fault. Worse or no change: undo it and try the next likely cause.
 
 ### 6. Record
-Write the record to a file with your file tool (rule 8), for example `record.json`:
+Write the record to a file with your file tool (rule 8), for example `record.json` (it carries the printer's plate
+unless you give `"plate"`, the plate the tile was really printed on):
 ```
 {"code": "PLA-NAVY-01", "printer": "P1S", "verdict": "strings between towers; rest good",
  "feature": {"fit": "0.20", "overhang": "55", "stringing": "bad"}}
@@ -100,7 +106,7 @@ scripts/registry.py record --from record.json --dry-run      # show the maker; o
 scripts/registry.py record --from record.json
 scripts/registry.py validate
 ```
-Other keys: `date`, `tile`, `settings`, `photos`, `note`, `why`, `set_process`. `set_filament` / `set_process` record
+Other keys: `plate`, `date`, `tile`, `settings`, `photos`, `note`, `why`, `set_process`. `set_filament` / `set_process` record
 the settings this tile was printed with. Put `"status": "tuned"` only in the record of the reprint that confirmed
 the change (the fault is gone and nothing new went wrong); leave it out while a change is still unconfirmed.
 New filament: write `{"code": "PLA-NAVY-01", "material": "PLA", "color": "Navy", "hex": "#1B2A4A", "brand": "...",
@@ -110,7 +116,7 @@ filament list; never guess them).
 
 ### 7. Use it
 `registry.py spec <code> --printer <printer>` prints the `tune_project.py` spec (filament color + every tuned
-value) for any project in that filament; `--for preset` prints `make_preset.py` overrides for a filament user
+value, and `curr_bed_type` set to the printer's plate) for any project in that filament; `--for preset` prints `make_preset.py` overrides for a filament user
 preset. Say which values are tuned and which are still system defaults. Without the bambu-studio-settings
 skill, give the maker the values to type into Bambu Studio (filament settings or process settings, as
 `references/registry.md` sorts them).

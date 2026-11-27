@@ -145,7 +145,7 @@ class Sweep(Main):
                   ["add", "PLA-RED-01", "--material", BIG, "--color", "R", "--hex", "#FF0000"],
                   ["add", "PLA-RED-01", "--material", "PLA", "--color", BIG, "--hex", "#FF0000"],
                   ["add", "PLA-RED-01", "--material", "PLA", "--color", "R", "--hex", BIG],
-                  ["init", "--force", "--printer", "P1S=" + BIG], ["init", "--force", "--printer", BIG + "=a|b|c"]]
+                  ["init", "--force", "--printer", "P1S=" + BIG], ["init", "--force", "--printer", BIG + "=a|b|Cool Plate"]]
         for args in cases:
             label = " ".join(a if len(a) < 40 else "<1 MB>" for a in args)
             with self.subTest(label):

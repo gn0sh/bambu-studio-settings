@@ -8,8 +8,9 @@
   Printed at other layer heights the readings shift (fits, overhang heights) - record the layer height.
 - **No supports.** The slicer finds no support need with supports off (`enable_support` = 0, the default).
   The 70 deg fin is meant to be hard.
-- Bambu Studio estimates (0.20mm Standard, system Basic filament presets, Textured PEI Plate), including the
-  printer's start sequence: P1S PLA about 52 min / 17.7 g; P1S PETG about 56 min; H2D PLA about 56 min; H2D PETG
+- Bambu Studio estimates (0.20mm Standard, system Basic filament presets; these were sliced on a Textured PEI
+  Plate, which is not an assumption: print on the plate the maker uses and record it), including the printer's
+  start sequence: P1S PLA about 52 min / 17.7 g; P1S PETG about 56 min; H2D PLA about 56 min; H2D PETG
   about 59 min / 17.0 g. The printing itself is about 38-42 min; the rest is heating, levelling and purge.
 
 ## Features (model coordinates, mm; X right, Y back, front edge y = 0)
@@ -64,9 +65,10 @@ geometry, write a new one without rendering: `openscad -o features.echo tile.sca
 
 ## Slicing notes (Bambu Studio command line)
 
-- **PETG with the CLI:** set `curr_bed_type` (e.g. `Textured PEI Plate`) in the process JSON. Without it the CLI
-  uses Cool Plate, where PETG presets have a plate temperature of 0, and it stops with "Filaments are not
-  compatible with the plate type". PLA slices either way (but then at Cool Plate temperatures).
+- **Set the plate for every CLI slice:** set `curr_bed_type` to the plate on the printer (`registry.py spec`
+  writes it from the printer's plate) in the project or process JSON. Without it the CLI uses Cool Plate, where
+  PETG presets have a plate temperature of 0, and it stops with "Filaments are not compatible with the plate
+  type". PLA slices either way, but then at Cool Plate temperatures, which is wrong on any other plate.
 - **Flattening system presets for the CLI:** resolve `inherits`, then the preset's `include` templates, then the
   preset's own keys, in that order of priority. If inherited keys win over the include templates, a machine
   preset comes out with the generic start G-code of `fdm_machine_common` instead of the printer's own (and

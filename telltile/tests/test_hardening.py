@@ -684,7 +684,7 @@ class SymlinkedRegistry(RegistryCase):
     def test_init_force_through_symlink_refused(self):
         secret = self.write("secret.txt", "token=do-not-copy\n"); os.chmod(secret, 0o600)
         p = self.link(secret)
-        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|c")
+        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|Cool Plate")
         self.assertNotEqual(rc, 0)
         self.assertIn("symlink or not a regular file", err)
         self.assertNotIn("Traceback", err)
@@ -709,10 +709,10 @@ class SymlinkedRegistry(RegistryCase):
 
     def test_dangling_symlink_not_replaced(self):
         p = self.link(self.path("missing.json"))
-        rc, out, err = self.reg("init", "--printer", "P1S=a|b|c")
+        rc, out, err = self.reg("init", "--printer", "P1S=a|b|Cool Plate")
         self.assertNotEqual(rc, 0)
         self.assertIn("exists", err)
-        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|c")
+        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|Cool Plate")
         self.assertNotEqual(rc, 0)
         self.assertIn("symlink", err)
         self.assertTrue(os.path.islink(p))
@@ -726,7 +726,7 @@ class SymlinkedRegistry(RegistryCase):
         self.assertEqual(rc, 0, err)
         self.assertEqual((mode(p), mode(p + ".bak")), ("0o600", "0o600"))
         os.chmod(p + ".bak", 0o644)                          # an older, looser .bak takes the registry's mode
-        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|c")
+        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|Cool Plate")
         self.assertEqual(rc, 0, err)
         kept = [n for n in os.listdir(self.dir) if ".before-init-" in n]
         self.assertEqual([mode(self.path(n)) for n in kept], ["0o600"])
@@ -754,7 +754,7 @@ class NoSkillFolderRegistry(RegistryCase):
             p = os.path.join(folder, "filaments.json")
             self.assertFalse(os.path.exists(p))
             self.addCleanup(lambda p=p: os.path.exists(p) and os.remove(p))
-            rc, out, err = fx.run("registry.py", "--registry", p, "init", "--printer", "P1S=a|b|c")
+            rc, out, err = fx.run("registry.py", "--registry", p, "init", "--printer", "P1S=a|b|Cool Plate")
             self.assertNotEqual(rc, 0)
             self.assertIn("inside the skill folder", err)
             self.assertFalse(os.path.exists(p))
@@ -773,7 +773,7 @@ class Backups(RegistryCase):
     def test_init_force_keeps_old_records(self):
         p = self.write_registry(fx.registry())
         before = self.read_bytes(p)
-        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|c")
+        rc, out, err = self.reg("init", "--force", "--printer", "P1S=a|b|Cool Plate")
         self.assertEqual(rc, 0, err)
         kept = [n for n in os.listdir(self.dir) if ".before-init-" in n]
         self.assertEqual(len(kept), 1)
@@ -784,7 +784,7 @@ class Backups(RegistryCase):
     def test_init_without_force_refuses(self):
         p = self.write_registry(fx.registry())
         before = self.read_bytes(p)
-        rc, out, err = self.reg("init", "--printer", "P1S=a|b|c")
+        rc, out, err = self.reg("init", "--printer", "P1S=a|b|Cool Plate")
         self.assertNotEqual(rc, 0)
         self.assertEqual(self.read_bytes(p), before)
 
@@ -872,7 +872,7 @@ class TrailingNewline(RegistryCase):
         self.assertEqual(rc, 1); self.assertIn("color.hex: a string of 8 characters (max 7)", err)
         rc, out, err = self.reg("spec", "PLA-NAVY-01", "--printer", "P1S")
         self.assertNotEqual(rc, 0); self.assertEqual(out, "")
-        self.reg("init", "--force", "--printer", "P1S=a|b|c")
+        self.reg("init", "--force", "--printer", "P1S=a|b|Cool Plate")
         rc, out, err = self.reg("add", "PLA-RED-01", "--material", "PLA", "--color", "Red", "--hex", "#FF0000\n")
         self.assertNotEqual(rc, 0); self.assertIn("--hex", err)
 
@@ -881,7 +881,7 @@ class TrailingNewline(RegistryCase):
         self.write_registry(reg)
         rc, out, err = self.reg("validate")
         self.assertEqual(rc, 1); self.assertIn("filaments[0].code: 'PLA-NAVY-01?' is not a code", err)
-        self.reg("init", "--force", "--printer", "P1S=a|b|c")
+        self.reg("init", "--force", "--printer", "P1S=a|b|Cool Plate")
         rc, out, err = self.reg("add", "PLA-RED-01\n", "--material", "PLA", "--color", "Red", "--hex", "#FF0000")
         self.assertNotEqual(rc, 0); self.assertIn("MATERIAL-COLOR-NN", err)
 

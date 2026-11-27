@@ -13,7 +13,12 @@ skill's folder: the registry is the maker's own file).
   registry.py spec PLA-NAVY-01 --printer P1S --for process-preset
   registry.py record --from record.json [--dry-run]   # {"code": "PLA-NAVY-01", "printer": "P1S", "verdict": "...",
         "feature": {"stringing": "bad"}, "set_filament": {"filament_retraction_length": "1.0"}, "status": "tuned"}
-        (optional keys: date, tile, settings, photos, note, why, set_process)
+        (optional keys: plate, date, tile, settings, photos, note, why, set_process)
+
+A printer's plate is the build plate on it (init needs it: Cool Plate, Engineering Plate, High Temp Plate, Textured
+PEI Plate or Supertack Plate; no default). Results belong to printer + plate + filament: a record carries the plate
+it was printed on (default the printer's), a tile printed on another plate may not change that printer's tuned
+values, and `spec` sets curr_bed_type to the printer's plate.
   registry.py validate                                          # schema, codes, printers, tests, preset names
   registry.py tile PLA-NAVY-01 --printer P1S [--layer 0.20] [--out tile.stl]   # the openscad command, quoted
 
@@ -142,15 +147,19 @@ ACCEL_KEYS = ("outer_wall_acceleration",)
 
 TEST_ID = PAT(TEST_ID_RE, 64, "a test id T-YYYYMMDD-PRINTER-NN")
 PRINTER = PAT(PRINTER_RE, 32, "a printer name (1-32 letters, digits, . _ -, starting with a letter or digit)")
-SAFE = PAT(SAFE_RE, 100, "a preset or plate name (1-100 letters, digits, spaces, . _ @ ( ) + / -, starting with "
+SAFE = PAT(SAFE_RE, 100, "a preset name (1-100 letters, digits, spaces, . _ @ ( ) + / -, starting with "
                          "a letter or digit)")
+# Build plates, as Bambu Studio names them in curr_bed_type (which plate temperature a slice uses). A printer's
+# plate and the plate a test was printed on are one of these; nothing else is accepted.
+PLATE_NAMES = ("Cool Plate", "Engineering Plate", "High Temp Plate", "Textured PEI Plate", "Supertack Plate")
+PLATE = ENUM(*PLATE_NAMES)
 CODE = PAT(CODE_RE, 40, "a code MATERIAL-COLOR-NN")
 DATE = PAT(DATE_RE, 10, "a date YYYY-MM-DD")
 SETTING = {b: SETTINGS_OF(b, {k: OBJ({"value": ("value", k, r), "tests": LIST(TEST_ID, 200)}, {"why": TEXT(500)})
                               for k, r in RULES[b].items()}) for b in RULES}
 CHANGED = {b: SETTINGS_OF(b, {k: ("value", k, r) for k, r in RULES[b].items()}) for b in RULES}
 TEST = OBJ({"id": TEST_ID, "date": DATE, "printer": PRINTER},
-           {"tile": TEXT(100), "photos": TEXT(100), "settings": TEXT(500), "verdict": TEXT(500), "note": TEXT(500),
+           {"plate": PLATE, "tile": TEXT(100), "photos": TEXT(100), "settings": TEXT(500), "verdict": TEXT(500), "note": TEXT(500),
             "changed": OBJ({"filament": CHANGED["filament"], "process": CHANGED["process"]}),
             "features": MAP(PAT(FEATURE_KEY_RE, 32, "a feature name (1-32 of a-z 0-9 _)"),
                             PAT(FEATURE_VALUE_RE, 32, "a feature result (1-32 letters, digits, spaces, . _ % + -)"),
@@ -163,7 +172,7 @@ FILAMENT = OBJ({"code": CODE, "brand": TEXT(64), "product_line": TEXT(64), "mate
                                            "filament": SETTING["filament"], "process": SETTING["process"]}), 16),
                 "tests": LIST(TEST, 200)})
 SCHEMA = OBJ({"schema": CONST(SCHEMA_ID), "updated": PAT(DATE_OR_EMPTY_RE, 10, "a date YYYY-MM-DD or empty"),
-              "printers": MAP(PRINTER, OBJ({"machine_preset": SAFE, "process_preset": SAFE, "plate": SAFE,
+              "printers": MAP(PRINTER, OBJ({"machine_preset": SAFE, "process_preset": SAFE, "plate": PLATE,
                                             "nozzle": ENUM("0.2", "0.4", "0.6", "0.8")}), 16),
               "filaments": LIST(FILAMENT, 500)},
              {"notes": LIST(TEXT(500), 50)})
@@ -637,14 +646,26 @@ def parse_kv(items):
     return out
 
 
+def plate_hint():
+    return "name the build plate on the printer, one of: %s" % ", ".join(PLATE_NAMES)
+
+
 def cmd_init(a):
     if os.path.lexists(REG) and not a.force:
         sys.exit("%s exists (use --force to start over; the old file is kept as a dated .bak)" % REG)
-    printers = {}
+    printers, no_plate = {}, []
     for k, v in parse_kv(a.printer).items():
         m, p, plate = (v.split("|") + ["", "", ""])[:3]
-        printers[k] = {"machine_preset": m, "process_preset": p, "plate": plate or "Textured PEI Plate", "nozzle": "0.4"}
+        printers[k] = {"machine_preset": m, "process_preset": p, "nozzle": "0.4"}
+        if plate:                                      # no default: the plate decides the bed temperature
+            printers[k]["plate"] = plate
+        else:
+            no_plate.append(k)
     reg = {"schema": SCHEMA_ID, "updated": "", "notes": [], "printers": printers, "filaments": []}
+    if no_plate:
+        bad = check(reg)
+        refuse(bad, "no build plate for printer %s: %s, as NAME=\"machine preset|process preset|plate\""
+               % (", ".join(safe_text(k, 32) for k in no_plate), plate_hint()))
     commit(reg, dry_run=True)                          # refuse before the backup is made
     writable_target()
     if os.path.lexists(REG):
@@ -698,8 +719,10 @@ def cmd_spec(a):
     q = shlex.quote
     base = f["presets"].get(pr)
     base_q = q(base) if base else '"<system filament preset>"'
+    bed = reg["printers"][pr]["plate"]
     if a.for_ == "tune":
         plate = dict(fil); plate.update(proc); plate["filament_color"] = f["color"]["hex"]
+        plate["curr_bed_type"] = bed                   # the results hold for this printer's plate only
         print(json.dumps({"plate": plate}, indent=1))
         print("# tune_project.py in.3mf out.3mf --spec <this file>   (%s on %s, status %s; base filament preset %s)"
               % (f["code"], pr, t["status"], base_q), file=sys.stderr)
@@ -717,6 +740,8 @@ def cmd_spec(a):
     print("# limits checked for %s: %s (plate <= %s C, outer wall acceleration <= %s mm/s2), from its machine_preset "
           "%s; for a registry from someone else, confirm this is the maker's printer"
           % (pr, what, _g(plate), _g(accel), shlex.quote(reg["printers"][pr]["machine_preset"])), file=sys.stderr)
+    print("# build plate: %s (%s's plate in the registry); these results hold on that plate only%s"
+          % (bed, pr, "" if a.for_ == "tune" else " - set curr_bed_type to it in the project"), file=sys.stderr)
     if t["status"] == "untested":
         print("# note: %s is untested on %s - the spec holds no tuned values yet" % (f["code"], pr), file=sys.stderr)
 
@@ -731,19 +756,27 @@ def cmd_record(a):
     same = re.compile(re.escape(stem) + r"([0-9]{2,4})\Z")     # id numbering: T-<date>-P1S-NN, not T-<date>-P1S-2-NN
     tid = stem + "%02d" % (1 + max([int(m.group(1)) for m in (same.fullmatch(x["id"]) for x in f["tests"]) if m] or [0]))
     setf, setp = pairs_of(a.set_filament), pairs_of(a.set_process)
-    rec = {"id": tid, "date": date, "printer": pr, "tile": a.tile,
+    bed = reg["printers"][pr]["plate"]
+    plate = bed if a.plate is None else a.plate
+    rec = {"id": tid, "date": date, "printer": pr, "plate": plate, "tile": a.tile,
            "settings": a.settings or "%s + %s + registry overrides as of this date" % (
                reg["printers"][pr]["process_preset"], f["presets"].get(pr, "?")),
            "changed": {"filament": setf, "process": setp}, "photos": a.photos or "",
            "features": pairs_of(a.feature), "verdict": a.verdict, "note": a.note or ""}
     f["tests"].append(rec)
-    for block, kv in (("filament", setf), ("process", setp)):
+    other_plate = plate != bed
+    for block, kv in (() if other_plate else (("filament", setf), ("process", setp))):
         for k, v in kv.items():
             old = t[block].get(k, {})
             t[block][k] = {"value": v, "tests": (old.get("tests", []) if old.get("value") == v else []) + [tid],
                            "why": a.why or a.verdict}
-    t["status"] = a.status or ("baseline" if t["status"] == "untested" else t["status"])
+    if not other_plate:
+        t["status"] = a.status or ("baseline" if t["status"] == "untested" else t["status"])
     commit(reg, dry_run=True)                          # the whole result passes SCHEMA, or nothing happens
+    if other_plate and (setf or setp or a.status or a.why):
+        sys.exit("refused: this tile was printed on %s, but %s's tuned values are for its plate, %s; results belong "
+                 "to printer + plate + filament. Add a printer entry for that plate (init --printer NAME=\"...|%s\"), "
+                 "or record it without set_filament, set_process, status and why" % (plate, pr, bed, plate))
     kk = known_keys()
     if kk:
         bad = [k for k in list(setf) + list(setp) if k not in kk]
@@ -782,14 +815,19 @@ def cmd_validate(a):
         for x in f["tests"]:
             if x["printer"] not in reg["printers"]:
                 problems.append("%s test %s: unknown printer %s" % (c, x["id"], x["printer"]))
+        plate_of = {x["id"]: x.get("plate") for x in f["tests"]}
         for p, t in f["tuned"].items():
             if p not in reg["printers"]: problems.append("%s: tuned entry for unknown printer %s" % (c, p))
+            bed = reg["printers"].get(p, {}).get("plate")
             for block in ("filament", "process"):
                 for k, v in t[block].items():
                     if kk and k not in kk: problems.append("%s %s: unknown key %s" % (c, p, k))
                     if not v["tests"]: problems.append("%s %s: %s has no test behind it" % (c, p, k))
                     for tid in v["tests"]:
                         if tid not in ids: problems.append("%s %s: %s cites missing test %s" % (c, p, k, tid))
+                        elif plate_of[tid] and bed and plate_of[tid] != bed:
+                            problems.append("%s %s: %s cites test %s, printed on %s, but %s's plate is %s"
+                                            % (c, p, k, tid, plate_of[tid], p, bed))
     if problems:
         print("\n".join(problems[:MAX_PROBLEMS]))
         if len(problems) > MAX_PROBLEMS: print("... and %d more" % (len(problems) - MAX_PROBLEMS))
@@ -832,7 +870,7 @@ def cmd_tile(a):
 FROM_FIELDS = {
     "add": {"code": "text", "material": "text", "color": "text", "hex": "text", "hex_exact": "flag",
             "brand": "text", "line": "text", "inventory": "text", "drying": "text", "preset": "names"},
-    "record": {"code": "text", "printer": "text", "verdict": "text", "date": "text", "tile": "text",
+    "record": {"code": "text", "printer": "text", "plate": "text", "verdict": "text", "date": "text", "tile": "text",
                "settings": "text", "photos": "text", "note": "text", "why": "text", "status": "text",
                "feature": "names", "set_filament": "values", "set_process": "values"}}
 FROM_DEFAULTS = {"add": {"brand": "unknown", "line": "unknown", "inventory": ""}, "record": {"tile": "tuning tile v1"}}
@@ -913,6 +951,7 @@ def main():
     s = sub.add_parser("spec"); s.add_argument("code"); s.add_argument("--printer", required=True)
     s.add_argument("--for", dest="for_", default="tune", choices=("tune", "preset", "process-preset")); s.set_defaults(fn=cmd_spec)
     s = sub.add_parser("record"); s.add_argument("code", nargs="?"); s.add_argument("--printer")
+    s.add_argument("--plate", help="the build plate the tile was printed on (default: the printer's plate)")
     s.add_argument("--from", dest="from_", metavar="FILE.json", help="the fields as a JSON object (see the top)")
     s.add_argument("--verdict", help=by_hand); s.add_argument("--date"); s.add_argument("--tile", help=by_hand)
     s.add_argument("--settings", help=by_hand); s.add_argument("--photos", help=by_hand)
