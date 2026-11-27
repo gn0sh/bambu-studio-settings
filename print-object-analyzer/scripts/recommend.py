@@ -2,7 +2,7 @@
 """Turn analyze_objects.py measurements into Bambu Studio settings, with a reason for every choice.
 
 usage: recommend.py analysis.json [--tested tested.json] [--hints hints.json] [--show=DIRS] [--load KIND]
-                    [--slice-json slice.json] [--out spec.json] [--report report.md] [--full] [--overwrite]
+                    [--plate PLATE] [--slice-json slice.json] [--out spec.json] [--report report.md] [--full] [--overwrite]
 
 Writes a spec that bambu-studio-settings/scripts/tune_project.py accepts (only "plate" and per-object "objects"
 rules with "why"), a sidecar spec.why.json (why each plate value, notes, which objects each rule is for), and a
@@ -19,6 +19,11 @@ hints.json   - what each object is for: {"regex": {"load": "decorative|functiona
                -y front, +y back, -x left, +x right, +z top, -z bottom; also front/back/left/right/top/bottom)
 --show/--load - the same for every object without a hint. Write --show=-y,+z with "=" (a value starting with
                "-" would be read as an option), or use words: --show front,top.
+--plate      - the build plate on the printer: cool, engineering, high-temp (smooth PEI), textured-pei or
+               supertack (or the Bambu Studio name, "Textured PEI Plate"). Without it the project's curr_bed_type is
+               used and the report asks to confirm it; with neither, the report says to ask (never assume Textured
+               PEI). It adds plate notes (bottom finish, first layer, PETG on smooth plates, rules BP1-BP6), proposes
+               curr_bed_type when the project's differs, and brim ears for big flat parts on smooth plates.
 --slice-json - output of `slice_check.py --json` on the tuned project, to cross-check support.
 --full       - put every proposed value in the spec, not only changes (to apply to another copy of the job).
 
@@ -49,7 +54,11 @@ DIMENSIONAL = {"layer_height", "wall_loops", "wall_generator", "detect_thin_wall
                "initial_layer_print_height", "precise_z_height"}
 TESTED_KEEP = DIMENSIONAL | {"brim_type", "brim_width", "brim_object_gap"}  # a tested fit depends on these too
 SETTING_KEY = re.compile(r"^[A-Za-z0-9_]+\Z")  # \Z, not $: "key\n" is not a key
-SPEC_SECTIONS = ("plate", "objects")  # what tune_project.py reads (it refuses anything else)
+SPEC_SECTIONS = ("plate", "objects")
+# Build plates: --plate word -> the curr_bed_type name Bambu Studio uses. Only Textured PEI is a textured surface.
+PLATES = (("cool", "Cool Plate"), ("engineering", "Engineering Plate"), ("high-temp", "High Temp Plate"),
+          ("textured-pei", "Textured PEI Plate"), ("supertack", "Supertack Plate"))
+TEXTURED_PLATES = ("Textured PEI Plate",)  # what tune_project.py reads (it refuses anything else)
 
 
 def first(v, default=None):
@@ -92,6 +101,20 @@ def parse_dirs(s):
     if bad:
         raise pc.UserError("unknown show direction(s): %s" % ", ".join(safe_text(b, 20) for b in sorted(bad)))
     return out
+
+
+def plate_name(s):
+    """The Bambu Studio plate name for a --plate word or name (any case), or None."""
+    t = str(s or "").strip().lower()
+    for word, name in PLATES:
+        if t in (word, name.lower()):
+            return name
+    return None
+
+
+def plate_facts(name):
+    """{"name", "smooth"} for a known plate name, or None (plate unknown)."""
+    return None if name is None else {"name": name, "smooth": name not in TEXTURED_PLATES}
 
 
 def load_json(path, what):
@@ -162,7 +185,7 @@ class Rec:
         self.notes.append(("[%s] " % rule if rule else "") + text)
 
 
-def recommend_object(o, ps, hint, tested, nozzle):
+def recommend_object(o, ps, hint, tested, nozzle, bed=None):
     r = Rec()
     load = (str(hint.get("load") or "")).lower() or None
     show = parse_dirs(hint.get("show"))
@@ -301,6 +324,23 @@ def recommend_object(o, ps, hint, tested, nozzle):
     if fl["contact_mm2"] > 20000:
         r.note("large first layer (%s mm2): watch corners lifting; clean plate, brim ears if they lift" %
                fl["contact_mm2"], "B4")
+        if bed and bed["smooth"] and "-z" not in show and brim_free and "brim_type" not in r.set:
+            r.put("brim_type", "brim_ears", "large first layer (%s mm2) on a smooth plate (%s): it grips less than "
+                  "textured PEI, and brim ears hold the corners" % (fl["contact_mm2"], bed["name"]), "BP6", "C")
+    # ---- build plate (--plate or the project's curr_bed_type)
+    if "-z" in show:
+        if bed is None:
+            r.note("bottom face shows: its finish depends on the build plate (Textured PEI: matte and textured; "
+                   "smooth plates: glossy) - ask which plate is on the printer", "BP4")
+        else:
+            r.note("bottom face shows: on the %s it comes out %s; pick the plate for the finish you want" % (
+                bed["name"], "glossy and smooth" if bed["smooth"] else "matte and textured"), "BP4")
+    types = ps.get("filament_type") if isinstance(ps.get("filament_type"), list) else [ps.get("filament_type")]
+    petg = sorted({f for f in o.get("filaments") or [1] if isinstance(f, int) and 0 < f <= len(types)
+                   and "PET" in str(types[f - 1] or "").upper()})
+    if bed and bed["smooth"] and petg:
+        r.note("PETG (filament %s) on a smooth plate (%s) can fuse to it and tear the surface: use a release agent "
+               "(glue stick), or print it on Textured PEI" % (",".join(map(str, petg)), bed["name"]), "BP5")
     relief = any(abs(x["z"] - 0.3) < 0.02 or abs(x["z"] - 0.4) < 0.02 for x in zf["levels"] if x["down_mm2"] > 0) \
         and fl["contact_share_of_footprint"] < 0.99
     bed_circ = [c for c in circles if c["axis"] == "z" and c["from"] <= 0.5]
@@ -366,6 +406,7 @@ def main():
     ap.add_argument("--hints")
     ap.add_argument("--show", help="show directions for objects without a hint, e.g. --show=-y,+z or --show front,top")
     ap.add_argument("--load", choices=["decorative", "functional", "structural"])
+    ap.add_argument("--plate", help="build plate on the printer: " + ", ".join(w for w, _ in PLATES))
     ap.add_argument("--slice-json")
     ap.add_argument("--full", action="store_true",
                     help="write every proposed setting, even ones the project already has (a portable spec)")
@@ -385,6 +426,29 @@ def main():
     check_tested(tested_t)
     hints_t = load_table(a.hints, "hints.json")
     nozzle = fnum(ps.get("nozzle_diameter"), 0.4)
+    if a.plate is not None and plate_name(a.plate) is None:
+        raise pc.UserError("--plate %r is not a build plate: use %s" % (safe_text(a.plate, 40), ", ".join(
+            w for w, _ in PLATES)))
+    proj_bed_raw = first(ps.get("curr_bed_type"))
+    proj_bed = plate_name(proj_bed_raw)
+    bed = plate_facts(plate_name(a.plate) if a.plate is not None else proj_bed)
+    plate_notes = []
+    if a.plate is None and proj_bed is None:
+        plate_notes.append("[BP0] build plate unknown%s: ask which plate is on the printer and run again with "
+                           "--plate (%s). Never assume Textured PEI: the plate decides the bed temperature "
+                           "(curr_bed_type)" % ((" (the project's curr_bed_type is %s)" % safe_text(proj_bed_raw, 40))
+                                                if proj_bed_raw else "", ", ".join(w for w, _ in PLATES)))
+    elif a.plate is None:
+        plate_notes.append("[BP0] build plate taken from the project (curr_bed_type %s): confirm it is the plate on "
+                           "the printer, or run again with --plate" % proj_bed)
+    if bed and bed["smooth"]:
+        plate_notes.append("[BP2] smooth plate (%s): glossy bottom face; less grip on sharp corners and small "
+                           "footprints than Textured PEI, so brims matter more (B1, B2, BP6); first-layer squish "
+                           "and elephant's foot read differently than on a textured plate" % bed["name"])
+    elif bed:
+        plate_notes.append("[BP3] Textured PEI: matte, textured bottom face; Bambu's start G-code lowers Z by "
+                           "0.02 mm (0.01 mm on a 0.2 mm nozzle) to fill the texture, so first-layer squish and "
+                           "elephant's foot measured here do not carry over to a smooth plate")
     objs = [o for o in A["objects"] if not o.get("error")]
     not_analyzed = [o for o in A["objects"] if o.get("error")]
 
@@ -395,7 +459,7 @@ def main():
         hint.setdefault("show", a.show)
         hint.setdefault("load", a.load)
         tested, _ = match_all(tested_t, o["name"])
-        r, c = recommend_object(o, ps, hint, tested, nozzle)
+        r, c = recommend_object(o, ps, hint, tested, nozzle, bed)
         c["tested"] = bool(tested)
         recs[id(o)], ctx[id(o)] = r, c
     # objects that could not be measured get no proposals, but plate changes must not reach them either (P1)
@@ -573,12 +637,18 @@ def main():
         for w_ in S.get("warnings") or []:
             xcheck.append("slicer warning: " + safe_text(w_, 300))
 
+    # ---- build plate: a project setting only (no object pins), so it joins the plate values after the rules
+    if a.plate is not None and (proj_bed != bed["name"] or a.full):
+        plate["curr_bed_type"] = bed["name"]
+        plate_why["curr_bed_type"] = "--plate: the plate on the printer (the project says %s) [BP1]" % (
+            safe_text(proj_bed_raw, 40) if proj_bed_raw else "nothing")
     pp = (A.get("project") or {}).get("post_process_findings") or 0
     spec = {"plate": plate, "objects": rules}
     assert set(spec) <= set(SPEC_SECTIONS)
     side = {"generated_by": "print-object-analyzer/recommend.py from %s" % ", ".join(
                 safe_text(x, 80) for x in A.get("inputs", [])),
-            "plate_why": plate_why, "notes": problems,
+            "plate_why": plate_why, "notes": problems, "build_plate": bed["name"] if bed else None,
+            "plate_notes": plate_notes,
             "rules": [{"match": r_["match"], "objects": m["names"]} for r_, m in zip(rules, merged)],
             "not_analyzed": [{"name": o.get("name"), "error": o.get("error")} for o in not_analyzed],
             "post_process_findings": pp}
@@ -607,6 +677,8 @@ def main():
         L.append("**NOT ANALYZED:** %s: %s. It gets no settings from this proposal%s." % (
             md(o.get("name"), 80), md(o.get("error"), 300),
             " (plate changes are pinned back to its current values)" if pins_of.get(id(o)) else ""))
+    L += ["## Build plate", "", "Plate: %s." % (md(bed["name"], 40) if bed else "unknown"), ""]
+    L += ["- " + md(n, 600) for n in plate_notes] + ([""] if plate_notes else [])
     L += ["## Plate (project-wide) changes", ""]
     if plate:
         L += ["| key | now | proposed | why |", "|---|---|---|---|"]

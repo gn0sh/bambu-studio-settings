@@ -64,6 +64,13 @@ numbers.
 | B2 | contact < 100 mm2 and height > 10 mm | `brim_type` outer_only | small footprint, little grip | common practice |
 | B3 | bottom (-z) shows | no brim (note) | a brim scars the bottom edge | common practice |
 | B4 | contact > 20000 mm2 | note | corners of big flat parts lift | common practice |
+| BP0 | `--plate` not given | note: ask which plate (or confirm the project's `curr_bed_type`) | the plate decides the bed temperature; never assume Textured PEI | common practice |
+| BP1 | `--plate` differs from the project's `curr_bed_type` | `curr_bed_type` on the plate | Bambu Studio uses the bed temperature of the plate `curr_bed_type` names | Bambu default |
+| BP2 | smooth plate (Cool, Engineering, High Temp, Supertack) | note | glossy bottom; less grip on corners and small footprints than Textured PEI; first layer reads differently | common practice |
+| BP3 | Textured PEI | note | textured bottom; Bambu's start G-code lowers Z 0.02 mm (0.01 on a 0.2 nozzle), so first-layer squish and elephant's foot read differently than on smooth plates | Bambu default |
+| BP4 | bottom (-z) shows | note: the finish that plate gives | textured on Textured PEI, glossy on smooth plates | common practice |
+| BP5 | PETG (`filament_type` contains PET) on a smooth plate | note: release agent | PETG can fuse to smooth PEI or glass and tear it | common practice |
+| BP6 | smooth plate + contact > 20000 mm2, bottom not shown, brim free | `brim_type` brim_ears | big flat parts lift at the corners more on smooth plates | common practice |
 | B5 | round holes/pins starting at the bed | note: keep `elefant_foot_compensation` | the squashed first layer closes holes / fattens pins | common practice |
 | F1 | round holes/pins under 6.5 mm | note | holes print undersize, pins oversize (~0.1-0.2 mm); tolerances are tied to tested settings | common practice |
 | M1 | show sides marked, +Y (back) not among them | `seam_position` back | the seam line goes where nobody looks | common practice |
@@ -79,7 +86,8 @@ numbers.
 Bambu-specific keys used: `layer_height`, `wall_loops`, `wall_generator`, `top_shell_layers`,
 `bottom_shell_layers`, `outer_wall_speed`, `enable_overhang_speed`, `enable_support`, `support_type`,
 `support_on_build_plate_only`, `brim_type`, `brim_width`, `seam_position`, `seam_slope_type`,
-`sparse_infill_density`, `sparse_infill_pattern`. All are object-level keys, so they work per object in a project.
+`sparse_infill_density`, `sparse_infill_pattern`. All are object-level keys, so they work per object in a project,
+except `curr_bed_type` (BP1), which is project-wide only and only ever goes in the spec's `plate`.
 
 ## What is measured, and how exactly
 
