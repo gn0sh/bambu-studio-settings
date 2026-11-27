@@ -79,8 +79,17 @@ def project_settings(**over):
           "filament_colour": ["#FFFFFF"], "layer_height": "0.2", "enable_prime_tower": "0",
           "printable_area": ["0x0", "256x0", "256x256", "0x256"], "printable_height": "250",
           "post_process": [], "seam_position": "aligned", "wall_loops": "2", "machine_start_gcode": START_GCODE,
-          "filament_start_gcode": ["; filament start"]}
+          "filament_start_gcode": ["; filament start"], "curr_bed_type": "Cool Plate", "cool_plate_temp": ["35"],
+          "cool_plate_temp_initial_layer": ["35"]}
     ps.update(over)
+    return ps
+
+
+def project_settings_without(*keys, **over):
+    """project_settings(**over) with these keys left out (a project saved without them)."""
+    ps = project_settings(**over)
+    for k in keys:
+        ps.pop(k, None)
     return ps
 
 

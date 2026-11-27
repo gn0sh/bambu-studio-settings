@@ -155,5 +155,100 @@ class VerifyTest(fx.TempDirTest):
         self.assertClean(r)
 
 
+class BuildPlateTest(fx.TempDirTest):
+    """verify_project.py: the build plate (curr_bed_type) and the bed temperature it resolves to per filament."""
+
+    def setUp(self):
+        super().setUp()
+        self.prof = fx.write_profiles(self.tmp)
+
+    def verify(self, ps, *args, objects=None):
+        return fx.run(V, fx.write_3mf(self.path("p.3mf"), objects=objects, ps=ps), "--profiles", self.prof, *args)
+
+    def test_prints_plate_and_temps(self):
+        r = self.verify(fx.project_settings(curr_bed_type="Textured PEI Plate", textured_plate_temp=["65"],
+                                            textured_plate_temp_initial_layer=["70"], cool_plate_temp=["35"]))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("build plate (curr_bed_type): Textured PEI Plate", r.stdout)
+        self.assertIn("slot 1 bed on Textured PEI Plate: 70 C first layer, 65 C other layers", r.stdout)
+        self.assertClean(r)
+
+    def test_json_has_build_plate(self):
+        r = self.verify(fx.project_settings(curr_bed_type="High Temp Plate", hot_plate_temp=["60"],
+                                            hot_plate_temp_initial_layer=["60"]), "--json")
+        bp = json.loads(r.stdout)["build_plate"]
+        self.assertEqual((bp["curr_bed_type"], bp["plate"], bp["key"]), ("High Temp Plate", "High Temp Plate",
+                                                                          "hot_plate_temp"))
+        self.assertEqual(bp["temps"], [{"slot": 1, "preset": fx.FILAMENT, "first_layer": 60, "other_layers": 60}])
+
+    def test_zero_for_plate_is_a_problem(self):
+        r = self.verify(fx.project_settings(curr_bed_type="Cool Plate", filament_settings_id=["Bambu PETG Basic"],
+                                            cool_plate_temp=["0"], cool_plate_temp_initial_layer=["0"],
+                                            textured_plate_temp=["70"], textured_plate_temp_initial_layer=["70"]))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("PROBLEM: filament 1 (Bambu PETG Basic): cool_plate_temp_initial_layer and cool_plate_temp "
+                      "are 0 on Cool Plate", r.stdout)
+
+    def test_zero_first_layer_only_is_a_problem(self):
+        r = self.verify(fx.project_settings(curr_bed_type="Engineering Plate", eng_plate_temp=["55"],
+                                            eng_plate_temp_initial_layer=["0"]), "--json")
+        self.assertEqual(r.returncode, 1)
+        self.assertTrue(any("eng_plate_temp_initial_layer is 0 on Engineering Plate" in p
+                            for p in json.loads(r.stdout)["problems"]))
+
+    def test_missing_temp_for_set_plate_is_a_problem(self):
+        r = self.verify(fx.project_settings(curr_bed_type="Supertack Plate", supertack_plate_temp=["40"]))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("no supertack_plate_temp_initial_layer in the project settings", r.stdout)
+
+    def test_unknown_plate_is_a_problem(self):
+        r = self.verify(fx.project_settings(curr_bed_type="Textured PEI\x1b[2J"))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("is not a plate these checks know", r.stdout)
+        self.assertClean(r)
+
+    def test_clean_default_project_has_no_plate_finding(self):
+        r = self.verify(fx.project_settings())
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertNotIn("curr_bed_type (the build plate) is not set", r.stdout)
+        self.assertIn("slot 1 bed on Cool Plate: 35 C first layer, 35 C other layers", r.stdout)
+
+    def test_unset_and_no_temps_is_only_a_note(self):
+        r = self.verify(fx.project_settings_without("curr_bed_type", "cool_plate_temp", "cool_plate_temp_initial_layer"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("note: curr_bed_type (the build plate) is not set", r.stdout)
+
+    def test_unset_is_a_note_not_a_problem(self):
+        r = self.verify(fx.project_settings_without("curr_bed_type"))
+        self.assertEqual(r.returncode, 0, r.stdout)
+        self.assertIn("note: curr_bed_type (the build plate) is not set", r.stdout)
+        self.assertIn("not set - the CLI uses Cool Plate", r.stdout)
+
+    def test_unset_with_zero_cool_plate_is_a_problem(self):
+        r = self.verify(fx.project_settings_without("curr_bed_type", cool_plate_temp=["0"],
+                                                    cool_plate_temp_initial_layer=["0"]))
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("curr_bed_type is not set, so the CLI uses Cool Plate", r.stdout)
+
+    def test_only_used_filaments_are_checked(self):
+        ps = fx.project_settings(curr_bed_type="Cool Plate", filament_colour=["#FFFFFF", "#000000"],
+                                 filament_settings_id=[fx.FILAMENT, "Bambu PETG Basic"],
+                                 cool_plate_temp=["35", "0"], cool_plate_temp_initial_layer=["35", "0"])
+        self.assertEqual(self.verify(ps).returncode, 0)
+        objs = [{"id": "1", "name": "A"}, {"id": "2", "name": "B", "extruder": "2"}]
+        r = self.verify(ps, objects=objs)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn("filament 2 (Bambu PETG Basic)", r.stdout)
+        self.assertNotIn("filament 1 (", r.stdout)
+
+    def test_odd_values_do_not_crash(self):
+        for v in (["x"], [None], [], "50", [["1"]], ["9" * 400], [True]):
+            r = self.verify(fx.project_settings(curr_bed_type=["Cool Plate"], cool_plate_temp=v,
+                                                cool_plate_temp_initial_layer=v), "--json")
+            self.assertNotIn("not checked", r.stdout)
+            json.loads(r.stdout)
+            self.assertClean(r)
+
+
 if __name__ == "__main__":
     unittest.main()

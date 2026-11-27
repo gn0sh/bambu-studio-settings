@@ -1928,6 +1928,79 @@ def effective(obj, ps, key, default=None):
     return v
 
 
+# Build plates: curr_bed_type names as Bambu Studio writes them, and the filament key holding that plate's bed
+# temperature (each with an _initial_layer twin for the first layer). Keys are in assets/known_setting_keys.txt.
+BED_TYPES = (("Cool Plate", "cool_plate_temp"), ("Engineering Plate", "eng_plate_temp"),
+             ("High Temp Plate", "hot_plate_temp"), ("Textured PEI Plate", "textured_plate_temp"),
+             ("Supertack Plate", "supertack_plate_temp"))
+CLI_DEFAULT_BED = "Cool Plate"   # what the Bambu Studio CLI uses when a project has no curr_bed_type
+BED_NAMES = ", ".join(n for n, _ in BED_TYPES)
+
+
+def _slot_int(ps, key, slot):
+    """The integer value of a per-filament setting for 1-based slot, or None when missing or not a number. A list
+    of one value (or a scalar) holds for every slot, as the scripts write a scalar for a list setting."""
+    v = ps.get(key)
+    if isinstance(v, list):
+        v = v[0] if len(v) == 1 else (v[slot - 1] if 0 < slot <= len(v) else None)
+    if v is None or isinstance(v, (dict, list, bool)):
+        return None
+    n = to_int(v, None)
+    if n is None and len(str(v).strip()) <= MAX_INT_CHARS:
+        try:
+            f = float(str(v).strip())
+            n = int(f) if math.isfinite(f) and f == int(f) else None
+        except (TypeError, ValueError, OverflowError):
+            n = None
+    return n
+
+
+def bed_check(ps, slots, presets=None):
+    """The build plate (curr_bed_type) and the bed temperatures it gives each filament slot in slots.
+    Returns (info, errors, warnings): info = {"curr_bed_type", "plate", "key", "temps": [{"slot", "preset",
+    "first_layer", "other_layers"}]}; errors are lines for a plate the filament cannot use (temperature 0, which
+    the Bambu Studio CLI refuses to slice), a temperature missing for the chosen plate, or a plate name these checks do
+    not know; warnings are lines for a curr_bed_type that is not set. Strings from the file are sanitized."""
+    presets = presets or []
+    raw = ps.get("curr_bed_type")
+    if isinstance(raw, list):
+        raw = raw[0] if raw else None
+    given = None if raw is None or str(raw).strip() == "" else str(raw).strip()
+    errors, warnings = [], []
+    info = {"curr_bed_type": None if given is None else safe_text(given, 40), "plate": None, "key": None,
+            "temps": []}
+    if given is None:
+        warnings.append("curr_bed_type (the build plate) is not set: the Bambu Studio CLI then uses %s, so the "
+                        "bed temperature may not be the one for the plate on the printer; set curr_bed_type to "
+                        "that plate (%s)" % (CLI_DEFAULT_BED, BED_NAMES))
+        plate = CLI_DEFAULT_BED
+    else:
+        plate = given
+    key = dict(BED_TYPES).get(plate)
+    if key is None:
+        errors.append("curr_bed_type %r is not a plate these checks know (%s): Bambu Studio may use another bed "
+                      "temperature than you expect; set it to the plate on the printer"
+                      % (safe_text(given, 40), BED_NAMES))
+        return info, errors, warnings
+    info["plate"], info["key"] = plate, key
+    why = "" if given is not None else " (curr_bed_type is not set, so the CLI uses %s)" % CLI_DEFAULT_BED
+    for s in slots:
+        first, other = _slot_int(ps, key + "_initial_layer", s), _slot_int(ps, key, s)
+        name = safe_text(presets[s - 1], 60) if 0 < s <= len(presets) and presets[s - 1] is not None else "?"
+        info["temps"].append({"slot": s, "preset": name, "first_layer": first, "other_layers": other})
+        zero = [k for k, v in ((key + "_initial_layer", first), (key, other)) if v == 0]
+        missing = [k for k, v in ((key + "_initial_layer", first), (key, other)) if v is None]
+        if zero:
+            errors.append("filament %d (%s): %s %s 0 on %s%s - this filament is not made for that plate and the "
+                          "Bambu Studio CLI refuses to slice it; use the plate the filament supports, or set "
+                          "curr_bed_type to the plate really on the printer"
+                          % (s, name, " and ".join(zero), "are" if len(zero) > 1 else "is", plate, why))
+        elif missing and given is not None:
+            errors.append("filament %d (%s): no %s in the project settings, so the bed temperature on %s is not "
+                          "known" % (s, name, " or ".join(missing), plate))
+    return info, errors, warnings
+
+
 def layer_height_key(v):
     """A layer height as a comparable label: '0.20', '0.2' and 0.2 are all '0.2'."""
     try:

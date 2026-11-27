@@ -14,6 +14,10 @@ Checks
   overlaps  bounding boxes on the same plate closer than --min-gap (default 0.8 mm) are flagged (boxes, not meshes:
             an L-shape nested in another can be flagged when it is fine - look before you move things)
   settings  object- and part-level overrides, and the effective layer height; prime-tower layer-height rule
+  plate     the build plate (curr_bed_type) and the bed temperature (first layer, other layers) it gives each
+            used filament. A temperature of 0 for that plate (the filament does not support it; the Bambu Studio
+            CLI refuses to slice), a temperature missing for it, or a plate name the checks do not know is a PROBLEM;
+            curr_bed_type not set is a note (the CLI then uses Cool Plate)
   safety    post-processing scripts (post_process: programs Bambu Studio runs on this computer when it slices)
             are a PROBLEM wherever Bambu Studio would load them: project settings, every embedded preset
             (Metadata/print_setting_*, process_settings_*, filament_settings_*, machine_settings_*), object and
@@ -335,6 +339,18 @@ def settings_checks(ps, st, problems, notes):
             notes.add("filament %d (%s) is in the project but no object uses it", f, bc.safe_text(colours[f - 1], 20))
 
 
+def plate_checks(ps, st, fpresets, problems, notes):
+    """The build plate and the bed temperatures it resolves to, per used filament (every slot if the layout
+    check did not finish); fills st["bed"]."""
+    slots = st["used"] if st["layout_ok"] and st["used"] else list(range(1, len(st["colours"]) + 1))
+    info, errors, warnings = bc.bed_check(ps, slots, fpresets)
+    st["build_plate"] = info
+    for e in errors:
+        problems.add("%s", e)
+    for w in warnings:
+        notes.add("%s", w)
+
+
 def as_list(v):
     return v if isinstance(v, list) else []
 
@@ -354,13 +370,14 @@ def report(a, index, force_area=None):
     notes = checked(problems, "custom G-code", gcode_notes, index, ps, sp_loader) or Lines()
     st = {"colours": as_list(ps.get("filament_colour")), "fmap": as_list(ps.get("filament_map")),
           "fmode": str(ps.get("filament_map_mode", "")), "bed": None, "ext_areas": [], "nplates": 1, "rows": [],
-          "objs": [], "plate_of": {}, "used": [], "layout_ok": False}
+          "objs": [], "plate_of": {}, "used": [], "layout_ok": False, "build_plate": None}
     fpresets = as_list(ps.get("filament_settings_id"))
     if a.expect_slots and len(st["colours"]) != a.expect_slots:
         problems.add("project has %d filaments, expected %d", len(st["colours"]), a.expect_slots)
     geo = checked(problems, "geometry", read_geometry, index, problems)
     checked(problems, "layout", layout_checks, a, index, ps, geo, force_area, st, problems, notes)
     checked(problems, "settings", settings_checks, ps, st, problems, notes)
+    checked(problems, "build plate", plate_checks, ps, st, fpresets, problems, notes)
 
     colours, fmap, fmode, ext_areas, used = st["colours"], st["fmap"], st["fmode"], st["ext_areas"], st["used"]
     summary = {"project": os.path.basename(a.project), "printer": ps.get("printer_settings_id"),
@@ -368,7 +385,7 @@ def report(a, index, force_area=None):
                "prime_tower": ps.get("enable_prime_tower"), "support": ps.get("enable_support"),
                "filaments": [{"slot": i + 1, "colour": c, "preset": fpresets[i] if i < len(fpresets) else None,
                               "nozzle": fmap[i] if i < len(fmap) else None} for i, c in enumerate(colours)],
-               "filament_map_mode": fmode, "bed": st["bed"], "plates": st["nplates"], "objects": st["rows"],
+               "filament_map_mode": fmode, "build_plate": st["build_plate"], "bed": st["bed"], "plates": st["nplates"], "objects": st["rows"],
                "post_process": [f.as_dict() for f in index.findings], "more_findings": index.more_findings,
                "problems": list(problems), "notes": list(notes)}
     summary["more"] = dict(problems.more)  # D9: {template: lines not printed}
@@ -387,6 +404,14 @@ def report(a, index, force_area=None):
         for f in summary["filaments"]:
             print("  slot %d %s %s%s" % (f["slot"], st_(f["colour"], 20), st_(f["preset"], 80),
                                           (" -> nozzle %s" % st_(f["nozzle"], 8)) if ext_areas else ""))
+        bp = summary["build_plate"]
+        if bp is not None:
+            print("  build plate (curr_bed_type): %s%s" % (st_(bp["curr_bed_type"], 40) if bp["curr_bed_type"]
+                  else "not set", "" if bp["curr_bed_type"] or not bp["plate"] else " - the CLI uses %s" % bp["plate"]))
+            deg = lambda v: "?" if v is None else "%d C" % v  # noqa: E731
+            for t in bp["temps"]:
+                print("  slot %d bed on %s: %s first layer, %s other layers (%s_initial_layer / %s)" % (
+                    t["slot"], bp["plate"], deg(t["first_layer"]), deg(t["other_layers"]), bp["key"], bp["key"]))
         if ext_areas:
             print("  filament_map_mode: %s; nozzle reach %s" % (st_(fmode, 30), ext_areas))
         for r in summary["objects"]:

@@ -252,5 +252,48 @@ class TuneTest(fx.TempDirTest):
         self.assertFalse(os.path.exists(self.out()))
 
 
+class TuneBuildPlateTest(fx.TempDirTest):
+    """tune_project.py warns about the build plate (curr_bed_type) but still writes."""
+
+    def tune(self, ps, *args):
+        src = fx.write_3mf(self.path("Job.3mf"), ps=ps)
+        return fx.run(T, src, self.path("out.3mf"), "--set", "seam_position=back", *args)
+
+    def test_no_warning_for_a_good_plate(self):
+        r = self.tune(fx.project_settings())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("WARNING", r.stdout)
+        self.assertIn("Build plate Cool Plate: bed slot 1 35/35 C", r.stdout)
+
+    def test_warns_when_unset(self):
+        r = self.tune(fx.project_settings_without("curr_bed_type"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("WARNING: curr_bed_type (the build plate) is not set", r.stdout)
+        self.assertTrue(os.path.exists(self.path("out.3mf")))
+
+    def test_warns_when_plate_gives_zero(self):
+        r = self.tune(fx.project_settings(curr_bed_type="Cool Plate", cool_plate_temp=["0"],
+                                          cool_plate_temp_initial_layer=["0"]))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("WARNING: filament 1", r.stdout)
+        self.assertIn("are 0 on Cool Plate", r.stdout)
+
+    def test_set_fixes_it(self):
+        ps = fx.project_settings_without("curr_bed_type", cool_plate_temp=["0"], cool_plate_temp_initial_layer=["0"],
+                                         textured_plate_temp=["70"], textured_plate_temp_initial_layer=["70"])
+        r = self.tune(ps, "--set", "curr_bed_type=Textured PEI Plate")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("WARNING", r.stdout)
+        self.assertIn("Build plate Textured PEI Plate: bed slot 1 70/70 C", r.stdout)
+        with zipfile.ZipFile(self.path("out.3mf")) as z:
+            self.assertEqual(json.loads(z.read("Metadata/project_settings.config"))["curr_bed_type"],
+                             "Textured PEI Plate")
+
+    def test_warns_on_unknown_plate(self):
+        r = self.tune(fx.project_settings(), "--set", "curr_bed_type=Glass")
+        self.assertIn("WARNING: curr_bed_type 'Glass' is not a plate these checks know", r.stdout)
+        self.assertClean(r)
+
+
 if __name__ == "__main__":
     unittest.main()

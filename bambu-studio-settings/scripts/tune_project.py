@@ -18,6 +18,8 @@ spec.json:
   slice results that point to it;
 * zip entries with unsafe names (absolute, "..", backslashes, drive letters, control or format characters) are
   left out and reported.
+Warns when curr_bed_type (the build plate) is not set, is not a known plate, or gives a used filament a bed
+temperature of 0 (the filament does not support that plate; the Bambu Studio CLI refuses to slice it) - it still writes.
 Refuses to write when a plate has the prime tower on, 2+ filaments and objects at different layer heights
 (Bambu Studio cannot slice that); --force writes anyway.
 Never edits in.3mf. Refuses an out.3mf that already exists unless --overwrite, and never writes over in.3mf
@@ -302,6 +304,15 @@ def tune_index(a, index, plate, rules, clears):
     unmatched = [r["match"] for r in rules if not any(r["rx"].search(o["name"]) for o in objs)]
     for u in unmatched:
         print("WARNING: rule %r matched no object" % u)
+    used = sorted({f for o in objs for f in bc.object_filaments(o)})
+    fpresets = ps.get("filament_settings_id") if isinstance(ps.get("filament_settings_id"), list) else []
+    bed, bed_errors, bed_warnings = bc.bed_check(ps, used, fpresets)
+    for w in bed_warnings + bed_errors:
+        print("WARNING: %s" % w)
+    if bed["curr_bed_type"] and not bed_errors:
+        print("Build plate %s: bed %s" % (bed["plate"], "; ".join(
+            "slot %d %s/%s C (first layer/other layers)" % (t["slot"], t["first_layer"], t["other_layers"])
+            for t in bed["temps"])))
 
     problems = bc.layer_height_check(objs, ps, plate_of)
     for pl, msg in problems:
