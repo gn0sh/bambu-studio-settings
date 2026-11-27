@@ -51,8 +51,9 @@ Scripts are in `scripts/` (Python 3.8+ and numpy). Each script takes `--help`. A
 
 Ask (or read from the conversation): which faces show in use or in photos (front/back/left/right/top/bottom, bed
 axes as placed: front = -Y), what each part is for (decorative / functional / structural), which parts carry
-tolerances that are not round holes or pins (slots, snaps: mark `fit: true`), and **which parts were already
-test-printed and at what settings**. Write `hints.json` and `tested.json` (formats in `assets/`); regexes match
+tolerances that are not round holes or pins (slots, snaps: mark `fit: true`), **which build plate is on the
+printer** (cool, engineering, high-temp / smooth PEI, textured-pei, supertack; never assume Textured PEI), and
+**which parts were already test-printed and at what settings**. Write `hints.json` and `tested.json` (formats in `assets/`); regexes match
 object names, case-insensitive (write `(?-i:^Lid\Z)` to tell "Lid" from "LID"; recommend.py flags such pairs).
 The spec rules recommend.py writes match each object's exact name, case included; objects that share a name
 but need different settings get no rule and a PROBLEM line: rename them in Bambu Studio first.
@@ -80,7 +81,11 @@ python scripts/recommend.py analysis.json --tested tested.json --hints hints.jso
 ```
 
 `--show=-y,+z` (with `=`, since a value starting with `-` reads as an option; or words: `--show front,top`) and
-`--load functional` set defaults for objects without a hint. The spec holds only changes against the project
+`--load functional` set defaults for objects without a hint. `--plate high-temp` (the plate the user named)
+factors the build plate in: bottom-face finish for parts whose bottom shows (textured on Textured PEI, glossy on
+smooth plates), brim ears for big flat parts on smooth plates, a release-agent note for PETG on smooth plates,
+first-layer notes, and `curr_bed_type` in the spec when the project's differs. Without `--plate` the project's
+`curr_bed_type` is used and the report asks you to confirm it; with neither, the report says to ask (rules BP0-BP6). The spec holds only changes against the project
 (`--full` writes every value, for a fresh copy of the job), and only the sections `tune_project.py` reads:
 `plate` settings (values more than half of the untested objects want) and per-object rules with a `why` for each
 key. Objects that did not ask for a changed plate value get a rule keeping their current value (P1), so tested
@@ -96,6 +101,8 @@ Summarise in a short table: plate settings, then per-object exceptions with the 
   objects that got no settings because they could not be measured.
 - **L5** - a prime-tower plate with 2+ filaments forces one layer height. A show part there loses its 0.16 mm; offer
   a separate plate.
+- **BP0** - the build plate was not given or came from the project: ask which plate is on the printer and re-run
+  with `--plate`. Display or face-down parts: tell the user the bottom finish that plate gives (BP4).
 - **S1** - support proposed (or removed). The analyzer checks flat ceilings and steep faces, not the slicer's own
   logic. Confirm in step 6.
 - **L4 / F1 / B5** - tops that round to the next layer, round features near tolerance size, holes at the bed.

@@ -231,5 +231,77 @@ class ErrorsTest(fx.TempDir):
         self.assertEqual(loop[0]["set"], {"wall_generator": "classic"})
 
 
+class BuildPlateTest(fx.TempDir):
+    """--plate: plate notes, curr_bed_type in the spec, brim ears on smooth plates, PETG release agent."""
+
+    def setUp(self):
+        super().setUp()
+        self.job = fx.write_project(self.path("j.3mf"), [
+            {"name": "Sign", "mesh": fx.box(0, 0, 0, 160, 140, 2)}, {"name": "Block", "mesh": BLOCK}],
+            ps=fx.project_settings(curr_bed_type="Textured PEI Plate", filament_type=["PETG"]))
+        code, _, err = fx.run("analyze_objects.py", self.job, "--out", self.path("a.json"), "--quiet")
+        self.assertEqual(code, 0, err)
+
+    def rec(self, *args):
+        code, _, err = fx.run("recommend.py", self.path("a.json"), "--out", self.path("s.json"), "--report",
+                              self.path("r.md"), "--overwrite", *args)
+        self.assertEqual(code, 0, err)
+        with open(self.path("s.json")) as f:
+            spec = json.load(f)
+        with open(self.path("s.why.json")) as f:
+            why = json.load(f)
+        with open(self.path("r.md"), encoding="utf-8") as f:
+            return spec, why, f.read().replace("\\[", "[").replace("\\]", "]")  # md() escapes brackets
+
+    def test_project_plate_is_used_and_confirmed(self):
+        spec, why, md = self.rec()
+        self.assertNotIn("curr_bed_type", spec["plate"])
+        self.assertEqual(why["build_plate"], "Textured PEI Plate")
+        self.assertIn("[BP0] build plate taken from the project", md)
+        self.assertIn("[BP3] Textured PEI", md)
+        self.assertNotIn("BP5", md)
+
+    def test_smooth_plate(self):
+        spec, why, md = self.rec("--plate", "high-temp")
+        self.assertEqual(spec["plate"].get("curr_bed_type"), "High Temp Plate")
+        self.assertIn("[BP1]", why["plate_why"]["curr_bed_type"])
+        self.assertIn("[BP2] smooth plate (High Temp Plate)", md)
+        self.assertIn("[BP5] PETG (filament 1) on a smooth plate", md)
+        sign = [r for r in spec["objects"] if re.search(r["match"], "Sign")]
+        brim = (sign[0]["set"] if sign else {}).get("brim_type", spec["plate"].get("brim_type"))
+        self.assertEqual(brim, "brim_ears")
+        self.assertNotIn("brim_ears", json.dumps([r for r in spec["objects"] if re.search(r["match"], "Block")
+                                                  and r["set"].get("brim_type") == "brim_ears"]))
+
+    def test_bottom_finish_note(self):
+        _, _, md = self.rec("--plate", "Cool Plate", "--show", "bottom")
+        self.assertIn("[BP4] bottom face shows: on the Cool Plate it comes out glossy", md)
+        _, _, md = self.rec("--plate", "textured-pei", "--show", "bottom")
+        self.assertIn("comes out matte and textured", md)
+
+    def test_unknown_plate_asks(self):
+        self.job = fx.write_project(self.path("k.3mf"), [{"name": "Block", "mesh": BLOCK}])
+        code, _, err = fx.run("analyze_objects.py", self.job, "--out", self.path("a.json"), "--quiet", "--overwrite")
+        self.assertEqual(code, 0, err)
+        spec, why, md = self.rec("--show", "bottom")
+        self.assertIsNone(why["build_plate"])
+        self.assertIn("[BP0] build plate unknown", md)
+        self.assertIn("Never assume Textured PEI", md)
+        self.assertIn("its finish depends on the build plate", md)
+        self.assertNotIn("curr_bed_type", spec["plate"])
+
+    def test_bad_plate_is_a_clean_error(self):
+        code, _, err = fx.run("recommend.py", self.path("a.json"), "--plate", "glass\x1b[2J")
+        self.assertNotEqual(code, 0)
+        self.assertIn("is not a build plate", err)
+        self.assertNotIn("Traceback", err)
+        self.assertNotIn("\x1b", err)
+
+    def test_spec_with_plate_passes_tune(self):
+        self.rec("--plate", "engineering")
+        code, out, err = fx.run_bss("tune_project.py", self.job, self.path("t.3mf"), "--spec", self.path("s.json"))
+        self.assertEqual(code, 0, err + out)
+
+
 if __name__ == "__main__":
     unittest.main()

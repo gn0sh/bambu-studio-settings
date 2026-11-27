@@ -11,7 +11,9 @@ setting to change with a starting step. Setting names are given as the Bambu Stu
    the tile, compare. Two changes at once and you cannot tell which one worked.
 2. **Read the ID panel first.** It says the printer, layer height and tile version (generic tiles: nozzle 0.4,
    layer 0.20, version, and the filament written on the blank strip by hand). If the photo does not show it, ask.
-   A verdict without knowing printer + filament + settings cannot be recorded.
+   A verdict without knowing printer + filament + settings cannot be recorded. **Ask which build plate** it was
+   printed on (Cool, Engineering, High Temp / smooth PEI, Textured PEI, Supertack) unless the maker's registry
+   already names it for that printer; never assume Textured PEI. Results belong to printer + plate + filament.
 3. **Fix in this order** (earlier faults cause later ones): wet filament / dirty plate -> first layer and elephant
    foot -> flow ratio (dimensions, top surface) -> temperature -> cooling (overhangs, bridges, tip) -> retraction
    (stringing) -> fit compensation (pins, holes) -> seam -> cosmetic (ironing, small text).
@@ -68,6 +70,12 @@ Steps are starting steps: one step per reprint, then halve the step when you are
   the project matches the plate on the printer (`curr_bed_type`), then initial layer bed temperature +5 C,
   **initial layer speed** `initial_layer_speed` -10 mm/s. (Z offset is the printer's own calibration, not a slicer
   setting; run the printer's bed levelling / calibration if the first layer is uneven across the plate.)
+- **Textured vs smooth plate - first-layer gauges read differently.** On the Textured PEI Plate, Bambu's start
+  G-code lowers Z by 0.02 mm (0.01 mm on a 0.2 mm nozzle) so the first layer fills the texture: the first layer
+  looks more squished, and the boss and pin bases can show a little more elephant foot than on a smooth plate at
+  the same settings. The bed side is matte and textured there (glossy on smooth plates), which hides fine line
+  gaps. Judge against the plate the tile was printed on, and never carry a first-layer or elephant-foot verdict
+  from one plate to another. PETG on a smooth plate can fuse to it: use a release agent (glue stick).
 - **Over-squished, rough ridged first layer:** usually printer-side Z offset; in the slicer try initial layer bed
   temperature -5 C and check flow ratio (section 4).
 

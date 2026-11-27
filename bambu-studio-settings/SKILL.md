@@ -60,8 +60,11 @@ folder under its `user\` folder (or `default` when nobody is signed in).
 
 ### 1. Find out what is being printed, on what
 
-Printer model and nozzle, filament(s) and AMS slots, one-off job or reusable setting, which faces show, and which
-parts were already test-printed (and at what settings). If a project already exists, read it first (if it was
+Printer model and nozzle, **which build plate is on the printer**, filament(s) and AMS slots, one-off job or
+reusable setting, which faces show, and which parts were already test-printed (and at what settings). The plate
+decides the bed temperature: when the user has not said which plate, ask (Cool, Engineering, High Temp / smooth
+PEI, Textured PEI, Supertack) and set `curr_bed_type` to it. Never assume Textured PEI. See "Build plate" in
+`references/settings-cookbook.md`. If a project already exists, read it first (if it was
 downloaded, hard rules 7 and 8 apply):
 
 ```
@@ -85,7 +88,7 @@ you want, so your overrides stay few. See `references/printer-notes.md` for nami
 Only the keys that differ from the base. Bambu stores every value as a string; list values (one per extruder
 or extruder variant) can be given as one scalar and the scripts repeat it. `references/settings-cookbook.md` has
 the common recipes: seam, scarf seam, walls and top layers for show faces, layer-height choice, brim, flush into
-infill, supports, and when to set something per object instead of per plate.
+infill, supports, the build plate, and when to set something per object instead of per plate.
 
 ### 4a. One-off job: build or tune the project
 
@@ -128,8 +131,10 @@ python scripts/verify_project.py job_tuned.3mf [--area 25,0,325,320] [--expect-s
 
 It checks filament slots and colors, that every object sits inside the bed (or the `--area` you give, e.g. the
 area both H2D nozzles reach), heights, overlaps, prime tower placement, the per-object settings Bambu Studio will
-use, the prime-tower layer-height rule, post-processing scripts and custom G-code. Exit code 1 means a problem
-to fix or explain.
+use, the prime-tower layer-height rule, each plate's plate type (its own `bed_type`, else `curr_bed_type`) and
+the bed temperature it gives each filament, post-processing scripts and custom G-code. A bed temperature of 0 on
+that plate type is a PROBLEM, and so is a missing one when the plate type is set; a plate type that is not set
+or not known is a note. Exit code 1 means a problem to fix or explain.
 
 Then, for single-filament projects, slice with the CLI and read the G-code:
 

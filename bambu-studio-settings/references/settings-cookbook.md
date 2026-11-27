@@ -10,6 +10,7 @@ exists, check `assets/known_setting_keys.txt` or a project saved by the user's o
 - Scarf seam
 - Walls and top layers for show faces
 - Layer height (and why "z features in 0.2 mm steps want 0.20 mm")
+- Build plate (bed type and bed temperature)
 - Brim
 - Flush into infill / objects / support (multi-color waste)
 - Supports
@@ -81,6 +82,41 @@ are smoother on curves and slopes and cost time roughly in proportion. Things to
 - `initial_layer_print_height` is usually 0.2 regardless of layer height; keep it unless there is a reason.
 - Variable layer height / "adaptive" changes are stored as layer ranges (`Metadata/layer_heights_profile.txt`,
   `layer_config_ranges.xml`) - check those exist before assuming an object is at one height.
+
+## Build plate
+
+The plate on the printer decides which bed temperature Bambu Studio uses. Set the project's `curr_bed_type` to the
+plate actually on the printer; ask the user which one when you do not know, and never assume Textured PEI. A wrong
+`curr_bed_type` does not fail: it silently prints at another plate's bed temperature.
+
+| Plate (`curr_bed_type`) | Filament keys (other layers / first layer) |
+|---|---|
+| `Cool Plate` | `cool_plate_temp` / `cool_plate_temp_initial_layer` |
+| `Engineering Plate` | `eng_plate_temp` / `eng_plate_temp_initial_layer` |
+| `High Temp Plate` (smooth PEI) | `hot_plate_temp` / `hot_plate_temp_initial_layer` |
+| `Textured PEI Plate` | `textured_plate_temp` / `textured_plate_temp_initial_layer` |
+| `Supertack Plate` | `supertack_plate_temp` / `supertack_plate_temp_initial_layer` |
+
+- Every filament preset carries all of these keys; the project copies them per filament slot (a list in
+  `project_settings.config`). Change a bed temperature on the key of the plate in use, not another one.
+- **0 means "not for this plate".** A filament with 0 for a plate (PETG on Cool Plate, for example) is not meant
+  for it: the CLI refuses to slice it ("Filaments are not compatible with the plate type"). Without
+  `curr_bed_type` the CLI uses Cool Plate, so set it for every CLI slice.
+- **Each plate can have its own plate type.** A plate in `Metadata/model_settings.config` may carry
+  `<metadata key="bed_type" value="Cool Plate"/>`; Bambu Studio then uses it for that plate instead of
+  `curr_bed_type`. Check both when a project has several plates.
+- `verify_project.py` prints, per plate, the plate type and the bed temperature (first layer, other layers) it
+  gives each filament printed there. A temperature of 0 on that plate type is a PROBLEM, and so is a missing
+  temperature when the plate type is set. A plate type that is not set, or not one of the five names above, is
+  a note: its temperatures are not checked. `tune_project.py` prints the same findings as warnings and still
+  writes. To set the plate type: `tune_project.py in.3mf out.3mf --set "curr_bed_type=<plate on the printer>"`.
+- **First layer reads differently.** On the Textured PEI Plate, Bambu's start G-code lowers Z by 0.02 mm (0.01 mm
+  with a 0.2 mm nozzle) so the first layer fills the texture. Squish and elephant foot measured on a textured
+  plate do not carry over to a smooth one, and the other way round; note the plate with every first-layer result.
+- **Bottom finish:** textured plates give a matte, textured bottom face; smooth plates (Cool, Engineering, High
+  Temp) give a glossy one. Pick the plate for parts whose bottom face shows.
+- **PETG on smooth PEI or glass** can fuse to the plate and tear it; use a release agent (glue stick) or the
+  textured plate. Smooth plates also hold less on sharp corners: a brim helps (see Brim).
 
 ## Brim
 

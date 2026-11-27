@@ -802,5 +802,47 @@ class OneSchema(unittest.TestCase):
         self.assertEqual(blocks, {k: b for b, rules in R.RULES.items() for k in rules})
 
 
+def get_at(doc, path):
+    for k in path:
+        doc = doc[k]
+    return doc
+
+
+def set_at(doc, path, v):
+    get_at(doc, path[:-1])[path[-1]] = v
+
+
+class PlateField(unittest.TestCase):
+    """registry-trust/plate-names: a printer's plate and a test's plate are one of Bambu Studio's plate names, and
+    nothing else: no near miss, case change, shell character, leading '-', padding or non-string."""
+
+    def test_only_the_plate_names(self):
+        doc = build(R.SCHEMA)
+        where = [("printers", "P1S", "plate"), ("filaments", 0, "tests", 0, "plate")]
+        for path in where:
+            self.assertIn(get_at(doc, path), R.PLATE_NAMES)
+            for name in R.PLATE_NAMES:
+                with self.subTest(path=path, ok=name):
+                    d = build(R.SCHEMA); set_at(d, path, name)
+                    self.assertEqual(R.check(d), [])
+            bad = ["Textured PEI", "textured pei plate", "TEXTURED PEI PLATE", " Cool Plate", "Cool Plate ",
+                   "-Cool Plate", "", "Default Plate", "Cool Plate\x00", "Cool\u202ePlate", "A" * 101]
+            bad += ["Cool Plate" + ch for ch in SHELL_CHARS] + [1, 1.5, True, None, ["Cool Plate"], {"a": 1}]
+            for v in bad:
+                with self.subTest(path=path, bad=repr(v)[:40]):
+                    d = build(R.SCHEMA); set_at(d, path, v)
+                    problems = R.check(d)
+                    self.assertEqual(len(problems), 1, problems)
+                    self.assertTrue(problems[0].startswith(ptext(path) + ": "), problems)
+
+    def test_test_plate_is_optional(self):
+        d = build(R.SCHEMA)
+        del d["filaments"][0]["tests"][0]["plate"]
+        self.assertEqual(R.check(d), [])
+        d = build(R.SCHEMA)
+        del d["printers"]["P1S"]["plate"]
+        self.assertEqual(R.check(d), ["printers.P1S: missing 'plate'"])
+
+
 if __name__ == "__main__":
     unittest.main()

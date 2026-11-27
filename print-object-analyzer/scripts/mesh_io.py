@@ -27,7 +27,7 @@ PROJECT_KEYS = ["printer_model", "printer_settings_id", "print_settings_id", "no
                 "seam_position", "seam_slope_type", "brim_type", "brim_width", "enable_support", "support_type",
                 "support_threshold_angle", "support_on_build_plate_only", "outer_wall_speed", "enable_overhang_speed",
                 "bridge_speed", "thick_bridges", "wall_generator", "detect_thin_wall", "elefant_foot_compensation",
-                "precise_z_height", "slow_down_layer_time", "print_sequence"]
+                "precise_z_height", "slow_down_layer_time", "print_sequence", "curr_bed_type"]
 
 MAX_TRIANGLES = 4000000              # triangles in all inputs together (about 4-5 minutes of analysis)
 MAX_STL_BYTES = 512 * 1024 * 1024    # one STL file

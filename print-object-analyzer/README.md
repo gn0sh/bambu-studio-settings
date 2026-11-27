@@ -19,7 +19,8 @@ Per object, in its placed orientation:
 - area facing each direction (for show faces and the seam), share of curved walls
 
 From these it proposes layer height, walls, top/bottom shells, outer-wall and overhang speed, supports, brim,
-seam, infill and wall generator. It keeps your **tested** settings: a part whose fit already passed keeps the
+seam, infill and wall generator, and it factors in the build plate you name (`--plate`): bottom-face finish,
+brims on smooth plates, release agent for PETG on smooth PEI, and the plate's `curr_bed_type`. It keeps your **tested** settings: a part whose fit already passed keeps the
 settings it passed at. It also keeps the one-layer-height rule on prime-tower plates.
 
 ## What is in it

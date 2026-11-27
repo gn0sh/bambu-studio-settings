@@ -26,6 +26,13 @@
   objects that plate's height (and record that the tested parts are now printed at a different height), move the
   odd object to its own plate, or, for a single-filament plate, turn the prime tower off.
 
+## "Filaments are not compatible with the plate type" / wrong bed temperature
+- The filament has a bed temperature of 0 for the plate `curr_bed_type` names (PETG on Cool Plate, for example),
+  or the project has no `curr_bed_type` and the CLI fell back to Cool Plate. Set `curr_bed_type` to the plate on
+  the printer (ask the user which one): `tune_project.py in.3mf out.3mf --set "curr_bed_type=<plate>"`.
+- `verify_project.py` prints the plate and the bed temperature each filament gets; a wrong plate does not fail,
+  it just prints at another plate's temperature. See "Build plate" in `settings-cookbook.md`.
+
 ## CLI slice fails or crashes
 - Multi-filament projects often crash the CLI (exit codes like 3221225477 / -1073741819 on Windows). Verify with
   `verify_project.py` and slice once in the app.

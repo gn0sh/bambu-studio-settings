@@ -18,6 +18,8 @@ spec.json:
   slice results that point to it;
 * zip entries with unsafe names (absolute, "..", backslashes, drive letters, control or format characters) are
   left out and reported.
+Warns, per plate (a plate's own bed_type wins over the project's curr_bed_type), when the plate type is not set,
+is not a known plate, or gives a filament printed there a bed temperature of 0 (the filament does not support that plate; the Bambu Studio CLI refuses to slice it) - it still writes.
 Refuses to write when a plate has the prime tower on, 2+ filaments and objects at different layer heights
 (Bambu Studio cannot slice that); --force writes anyway.
 Never edits in.3mf. Refuses an out.3mf that already exists unless --overwrite, and never writes over in.3mf
@@ -287,7 +289,7 @@ def tune_index(a, index, plate, rules, clears):
     ms2 = tune_objects(ms, rules, clears, report)
     tree2 = bc.xml_tree(ms2, "Metadata/model_settings.config")  # also proves the edited file is well-formed
     objs = bc.parse_objects(tree2)
-    plate_of, _ = bc.parse_plates(tree2)
+    plate_of, plates_meta = bc.parse_plates(tree2)
     print("Plate settings changed:")
     for k, old, v in changes:
         print("  %-28s %s -> %s" % (k, bc.safe_json(old, 120), bc.safe_json(v, 120)))
@@ -302,6 +304,20 @@ def tune_index(a, index, plate, rules, clears):
     unmatched = [r["match"] for r in rules if not any(r["rx"].search(o["name"]) for o in objs)]
     for u in unmatched:
         print("WARNING: rule %r matched no object" % u)
+    slots = {}
+    for o in objs:
+        slots.setdefault(plate_of.get(o["id"], 1), set()).update(bc.object_filaments(o))
+    fpresets = ps.get("filament_settings_id") if isinstance(ps.get("filament_settings_id"), list) else []
+    beds, bed_errors, bed_warnings = bc.bed_check(
+        ps, [(n, plates_meta.get(n, {}).get("bed_type"), sorted(slots[n])) for n in sorted(slots)], fpresets)
+    for w in bed_warnings + bed_errors:
+        print("WARNING: %s" % w)
+    for bed in beds:
+        if bed["source"] != "not set" and bed["key"] and all(
+                t["first_layer"] is not None and t["other_layers"] is not None for t in bed["temps"]):
+            print("Plate %d build plate %s (%s): bed %s" % (bed["plate"], bed["bed"], bed["source"], "; ".join(
+                "slot %d %s/%s C (first layer/other layers)" % (t["slot"], t["first_layer"], t["other_layers"])
+                for t in bed["temps"])))
 
     problems = bc.layer_height_check(objs, ps, plate_of)
     for pl, msg in problems:

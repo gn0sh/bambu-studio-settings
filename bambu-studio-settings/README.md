@@ -10,7 +10,7 @@ An Agent Skill that sets up Bambu Studio print settings and checks them before y
 | `scripts/list_presets.py` | Lists the system presets each printer can use (read from your Bambu Studio install) and your user presets |
 | `scripts/make_preset.py` | Creates a user preset (`.json` + `.info`) from a system base and overrides. Dry run unless `--write` |
 | `scripts/tune_project.py` | Applies plate-wide settings and per-object rules (regex on object names) to a project .3mf, with a report |
-| `scripts/verify_project.py` | Checks a project: filament slots and colors, bed / nozzle-reach bounds, overlaps, prime tower, per-object settings |
+| `scripts/verify_project.py` | Checks a project: filament slots and colors, bed / nozzle-reach bounds, overlaps, prime tower, per-object settings, the build plate and the bed temperature it gives each filament |
 | `scripts/slice_check.py` | Slices a single-filament project or STLs with the Bambu Studio CLI and reports time, grams, support and the layer heights each object really got |
 | `references/` | Settings cookbook, preset and 3MF formats, printer notes, troubleshooting |
 | `assets/` | Example tune spec; list of known setting keys (typo check) |

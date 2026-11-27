@@ -252,5 +252,59 @@ class TuneTest(fx.TempDirTest):
         self.assertFalse(os.path.exists(self.out()))
 
 
+class TuneBuildPlateTest(fx.TempDirTest):
+    """tune_project.py warns about the build plate (curr_bed_type) but still writes."""
+
+    def tune(self, ps, *args):
+        src = fx.write_3mf(self.path("Job.3mf"), ps=ps)
+        return fx.run(T, src, self.path("out.3mf"), "--set", "seam_position=back", *args)
+
+    def test_no_warning_for_a_good_plate(self):
+        r = self.tune(fx.project_settings())
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("WARNING", r.stdout)
+        self.assertIn("Plate 1 build plate Cool Plate (curr_bed_type): bed slot 1 35/35 C", r.stdout)
+
+    def test_warns_when_unset(self):
+        r = self.tune(fx.project_settings_without("curr_bed_type"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("WARNING: plate type not set", r.stdout)
+        self.assertTrue(os.path.exists(self.path("out.3mf")))
+
+    def test_warns_when_plate_gives_zero(self):
+        r = self.tune(fx.project_settings(curr_bed_type="Cool Plate", cool_plate_temp=["0"],
+                                          cool_plate_temp_initial_layer=["0"]))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("WARNING: plate 1: filament 1", r.stdout)
+        self.assertIn("are 0 on Cool Plate", r.stdout)
+
+    def test_set_fixes_it(self):
+        ps = fx.project_settings_without("curr_bed_type", cool_plate_temp=["0"], cool_plate_temp_initial_layer=["0"],
+                                         textured_plate_temp=["70"], textured_plate_temp_initial_layer=["70"])
+        r = self.tune(ps, "--set", "curr_bed_type=Textured PEI Plate")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertNotIn("WARNING", r.stdout)
+        self.assertIn("Plate 1 build plate Textured PEI Plate (curr_bed_type): bed slot 1 70/70 C", r.stdout)
+        with zipfile.ZipFile(self.path("out.3mf")) as z:
+            self.assertEqual(json.loads(z.read("Metadata/project_settings.config"))["curr_bed_type"],
+                             "Textured PEI Plate")
+
+    def test_plate_bed_type_wins(self):
+        src = fx.write_3mf(self.path("Job.3mf"), ps=fx.project_settings(textured_plate_temp=["0"],
+                                                                       textured_plate_temp_initial_layer=["0"]),
+                           plate_meta={1: {"bed_type": "Textured PEI Plate"}})
+        r = fx.run(T, src, self.path("out.3mf"), "--set", "seam_position=back")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("WARNING: plate 1: filament 1", r.stdout)
+        self.assertIn("are 0 on Textured PEI Plate", r.stdout)
+        with zipfile.ZipFile(self.path("out.3mf")) as z:
+            self.assertIn(b'key="bed_type" value="Textured PEI Plate"', z.read("Metadata/model_settings.config"))
+
+    def test_warns_on_unknown_plate(self):
+        r = self.tune(fx.project_settings(), "--set", "curr_bed_type=Glass")
+        self.assertIn("WARNING: plate 1: unknown plate type 'Glass'", r.stdout)
+        self.assertClean(r)
+
+
 if __name__ == "__main__":
     unittest.main()

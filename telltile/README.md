@@ -17,7 +17,7 @@ and engraved, the hook mark at 10 / 6 / 3 mm and its dot as 2 / 1.5 / 1 mm pins.
 | `references/photo-instructions.md` | The photo list to send the maker, and how to check the photos |
 | `references/registry.md` | The filament registry format; which settings belong in a filament preset and which in the process |
 | `references/tile-spec.md` | Every feature's size, making a tile with your printer and filament on the ID panel, checks, slicer notes |
-| `scripts/registry.py` | Your filament registry: add filaments, record tile prints, print tuned settings as JSON for project files or presets |
+| `scripts/registry.py` | Your filament registry: add filaments, record tile prints, print tuned settings as JSON for project files or presets. Results are kept per printer + build plate + filament |
 | `scripts/check_stl.py` | Checks an exported tile: size, shells, closed mesh |
 | `scripts/check_gcode.py` | Checks a sliced tile: every feature present at its designed height |
 | `assets/tuning-tile_generic.stl` | The tile, ready to print (write your filament on the blank strip of the ID panel) |
