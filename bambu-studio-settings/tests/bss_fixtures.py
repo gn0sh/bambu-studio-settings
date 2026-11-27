@@ -48,8 +48,9 @@ def xml_value(v):
     return "".join(c for c in v if ord(c) >= 32)
 
 
-def model_settings(objects, gcode_file="", extra_plate_objects=None):
-    """objects: [dict(id, name, extruder, settings={}, parts=[dict(id, name, extruder, subtype)])] on plate 1."""
+def model_settings(objects, gcode_file="", extra_plate_objects=None, plate_meta=None):
+    """objects: [dict(id, name, extruder, settings={}, parts=[dict(id, name, extruder, subtype)], plate=1)];
+    plate_meta: {plate number: {key: value}} metadata on that <plate> (e.g. bed_type)."""
     out = ['<?xml version="1.0" encoding="UTF-8"?>', "<config>"]
     for o in objects:
         out.append('  <object id="%s">' % o["id"])
@@ -64,12 +65,17 @@ def model_settings(objects, gcode_file="", extra_plate_objects=None):
                 out.append('      <metadata key="extruder" value="%s"/>' % p["extruder"])
             out.append("    </part>")
         out.append("  </object>")
-    out.append("  <plate>")
-    out.append('    <metadata key="plater_id" value="1"/>')
-    out.append('    <metadata key="gcode_file" value="%s"/>' % gcode_file)
-    for o in objects:
-        out.append('    <model_instance>\n      <metadata key="object_id" value="%s"/>\n    </model_instance>' % o["id"])
-    out.append("  </plate>")
+    for n in sorted({o.get("plate", 1) for o in objects} | set(plate_meta or {}) or {1}):
+        out.append("  <plate>")
+        out.append('    <metadata key="plater_id" value="%d"/>' % n)
+        out.append('    <metadata key="gcode_file" value="%s"/>' % gcode_file)
+        for k, v in (plate_meta or {}).get(n, {}).items():
+            out.append('    <metadata key="%s" value="%s"/>' % (k, xml_value(v)))
+        for o in objects:
+            if o.get("plate", 1) == n:
+                out.append('    <model_instance>\n      <metadata key="object_id" value="%s"/>\n    </model_instance>'
+                           % o["id"])
+        out.append("  </plate>")
     out.append("</config>")
     return "\n".join(out) + "\n"
 
@@ -97,7 +103,7 @@ def default_objects():
     return [{"id": "1", "name": "Cube A"}, {"id": "2", "name": "Clip"}]
 
 
-def write_3mf(path, objects=None, ps=None, model=None, extra=None, gcode_file=""):
+def write_3mf(path, objects=None, ps=None, model=None, extra=None, gcode_file="", plate_meta=None):
     """A minimal Bambu project: [Content_Types].xml, 3D/3dmodel.model, the two Metadata configs, plus extra
     {name: str or bytes} entries."""
     objects = default_objects() if objects is None else objects
@@ -108,7 +114,7 @@ def write_3mf(path, objects=None, ps=None, model=None, extra=None, gcode_file=""
         z.writestr("[Content_Types].xml", '<?xml version="1.0"?><Types/>')
         z.writestr("3D/3dmodel.model", model)
         z.writestr("Metadata/project_settings.config", json.dumps(project_settings() if ps is None else ps, indent=4))
-        z.writestr("Metadata/model_settings.config", model_settings(objects, gcode_file))
+        z.writestr("Metadata/model_settings.config", model_settings(objects, gcode_file, plate_meta=plate_meta))
         for n, data in (extra or {}).items():
             z.writestr(n, data)
     return path
