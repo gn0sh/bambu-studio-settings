@@ -1,8 +1,6 @@
 # bambu-studio-settings
 
-An Agent Skill that lets an AI coding agent (Claude Code on Windows, macOS or Linux) make Bambu Studio print
-settings real: user presets, and project files (.3mf) whose settings are built in - for the whole plate and for
-individual objects - checked before you print.
+An Agent Skill that sets up Bambu Studio print settings and checks them before you print: user presets, and project files (.3mf) with the settings built in, for the whole plate and for individual objects. It runs in an AI coding agent such as Claude Code, on Windows, macOS or Linux.
 
 ## What is in it
 
@@ -29,8 +27,9 @@ piece with 3 walls and the seam at the back, but keep the clips at 0.20 mm".
 
 ## Safety
 
-- It never changes or deletes your existing presets or project files unless you ask; it writes new files.
-- A new user preset syncs to your Bambu account (and your other computers). The agent should tell you first.
+- What it changes on disk: it writes new files only (a new user preset, or a new copy of a project file). It never changes or deletes your existing presets or project files unless you ask.
+- Dry run is the default for presets: `make_preset.py` shows what it would write and writes nothing until you add `--write`. For projects, `tune_project.py --dry-run` previews the same way, and it never writes over the original file.
+- Cloud sync: a new user preset syncs to your Bambu account and your other computers. The agent should tell you first.
 - Bambu Studio reads presets at startup - restart it to see a new one.
 - One-off jobs are better as settings inside the project file: nothing syncs.
 - Safety with downloaded files: a .3mf from the internet can carry post-processing scripts (programs that run on
@@ -65,3 +64,8 @@ Bambu Lab and Bambu Studio are trademarks of Bambu Lab. This project is not affi
 Bambu Lab. It ships no Bambu Studio code or profiles: it reads the ones already on your computer.
 
 A gnoshcodes project.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/brand/gnoshcodes-lockup-dark.svg">
+  <img src="../assets/brand/gnoshcodes-lockup-light.svg" alt="gnoshcodes" width="90">
+</picture>

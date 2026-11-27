@@ -1,8 +1,8 @@
 # print-object-analyzer
 
-An Agent Skill for AI coding agents (Claude Code and similar). It reads the real geometry of each part on a
+An Agent Skill that reads the real geometry of each part on a
 Bambu Studio plate, or in STL files, and proposes print settings per object. Every proposal comes with the
-measurement behind it. It plugs into the
+measurement behind it. It runs in an AI coding agent such as Claude Code and plugs into the
 **bambu-studio-settings** skill (also from gnoshcodes), so the flow is:
 analyze -> recommend -> review -> tune -> verify -> slice -> print -> record.
 
@@ -69,7 +69,12 @@ at? The drawer front shows in photos, and the lid was tested at 0.20 mm".
 
 ## License
 
-MIT - see `LICENSE`. Bambu Lab and Bambu Studio are trademarks of their owners; this project is not affiliated
+MIT, see `LICENSE`. Bambu Lab and Bambu Studio are trademarks of their owners; this project is not affiliated
 with or endorsed by Bambu Lab.
 
 A gnoshcodes project.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="../assets/brand/gnoshcodes-lockup-dark.svg">
+  <img src="../assets/brand/gnoshcodes-lockup-light.svg" alt="gnoshcodes" width="90">
+</picture>
