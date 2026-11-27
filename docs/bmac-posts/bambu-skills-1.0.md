@@ -7,11 +7,9 @@ Brian posts this himself at buymeacoffee.com/gnoshcodes. Do not post from this f
 - [ ] Post after the repo goes public; the Reddit posts are separate (check each sub's rules first).
 
 ## Post
-New: three free skills for Bambu Lab printers.
+We released three free skills for Bambu Lab printers. They set up Bambu Studio print settings for a whole plate or for single objects, measure each part and suggest settings, and check a project before you print. A small test tile, Telltile, helps you tune each filament from a photo.
 
-They set up Bambu Studio print settings for a whole plate or for single objects, measure each part and suggest settings, and check a project before you print. There is also a small test tile (Telltile) that helps you tune each filament from a photo.
-
-They run in an AI coding agent such as Claude Code. They write new files only, and presets are a dry run until you say so. Free, MIT licensed.
+They run in an AI coding agent such as Claude Code. They write new files only, and presets are a dry run until you say so. They are MIT licensed.
 
 Get them here: https://github.com/gn0sh/bambu-studio-settings
 
